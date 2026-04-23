@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { Home, CreditCard, FileText, MessageSquare, Zap, LogOut, Calendar, Mail } from 'lucide-react';
+import { Home, CreditCard, FileText, MessageSquare, Zap, LogOut, Calendar, Mail, Menu, X } from 'lucide-react';
 import { Button } from './ui/button';
 import { NotificationCenter } from './NotificationCenter';
 import { TenantOverview } from './tenant/TenantOverview';
@@ -21,6 +21,7 @@ type View = 'overview' | 'rent' | 'bills' | 'history' | 'requests' | 'payment-pl
 
 export function TenantDashboard() {
   const [currentView, setCurrentView] = useState<View>('overview');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const navigate = useNavigate();
   const userName = localStorage.getItem('userName') || 'Tenant';
   const [showLeaseAgreement, setShowLeaseAgreement] = useState(false);
@@ -88,11 +89,35 @@ export function TenantDashboard() {
   ];
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="relative flex h-screen bg-gray-50 overflow-hidden">
+      {isSidebarOpen && (
+        <button
+          type="button"
+          className="fixed inset-0 z-30 bg-black/40 md:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+          aria-label="Close sidebar"
+        />
+      )}
+
       {/* Sidebar */}
-      <div className="w-64 bg-[#1e3a3f] shadow-lg flex flex-col">
+      <div
+        className={`fixed inset-y-0 left-0 z-40 w-64 bg-[#1e3a3f] shadow-lg flex flex-col transform transition-transform duration-300 md:static md:translate-x-0 ${
+          isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
         <div className="p-6 border-b border-[#2d5358]">
-          <h1 className="text-2xl text-white">Rentify</h1>
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl text-white">Rentify</h1>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="md:hidden text-white hover:bg-white/10 hover:text-white"
+              onClick={() => setIsSidebarOpen(false)}
+              aria-label="Close menu"
+            >
+              <X className="w-5 h-5" />
+            </Button>
+          </div>
           <p className="text-sm text-gray-300 mt-1">{userName}</p>
         </div>
 
@@ -104,9 +129,11 @@ export function TenantDashboard() {
                 if (requireInitialRentPayment && item.id !== 'rent') {
                   toast.info('Complete your initial 3-month rent payment first.');
                   setCurrentView('rent');
+                  setIsSidebarOpen(false);
                   return;
                 }
                 setCurrentView(item.id);
+                setIsSidebarOpen(false);
               }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg mb-2 transition-colors ${
                 currentView === item.id
@@ -129,17 +156,28 @@ export function TenantDashboard() {
       </div>
 
       {/* Main content */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto min-w-0">
         {/* Header with Notifications */}
-        <div className="bg-white border-b px-8 py-4 flex items-center justify-between sticky top-0 z-10">
-          <h2 className="text-2xl font-semibold capitalize">{currentView === 'rent' ? 'Pay Rent' : currentView === 'history' ? 'Payment History' : currentView}</h2>
+        <div className="bg-white border-b px-4 md:px-8 py-4 flex items-center justify-between sticky top-0 z-20">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="md:hidden"
+              onClick={() => setIsSidebarOpen(true)}
+              aria-label="Open menu"
+            >
+              <Menu className="w-5 h-5" />
+            </Button>
+            <h2 className="text-xl md:text-2xl font-semibold capitalize">{currentView === 'rent' ? 'Pay Rent' : currentView === 'history' ? 'Payment History' : currentView}</h2>
+          </div>
           <NotificationCenter
             userType="tenant"
             onNotificationClick={(navigateTo) => setCurrentView(navigateTo as View)}
           />
         </div>
         
-        <div className="p-8">
+        <div className="p-4 md:p-8">
           {currentView === 'overview' && (
             <TenantOverview
               onNavigateToPayment={() => setCurrentView('rent')}

@@ -12,7 +12,9 @@ import {
   AlertTriangle,
   FileText,
   BarChart3,
-  Database
+  Database,
+  Menu,
+  X
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { NotificationCenter } from './NotificationCenter';
@@ -30,6 +32,7 @@ type View = 'overview' | 'users' | 'properties' | 'analytics' | 'revenue' | 'sup
 
 export function AdminDashboard() {
   const [currentView, setCurrentView] = useState<View>('overview');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [systemStatus, setSystemStatus] = useState('Checking system health...');
   const navigate = useNavigate();
   const adminName = localStorage.getItem('adminName') || 'System Admin';
@@ -101,13 +104,37 @@ export function AdminDashboard() {
   ];
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="relative flex h-screen bg-gray-50 overflow-hidden">
+      {isSidebarOpen && (
+        <button
+          type="button"
+          className="fixed inset-0 z-30 bg-black/40 md:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+          aria-label="Close sidebar"
+        />
+      )}
+
       {/* Sidebar */}
-      <div className="w-64 bg-gradient-to-b from-[#1e3a3f] to-[#0f1f22] shadow-lg flex flex-col">
+      <div
+        className={`fixed inset-y-0 left-0 z-40 w-64 bg-gradient-to-b from-[#1e3a3f] to-[#0f1f22] shadow-lg flex flex-col transform transition-transform duration-300 md:static md:translate-x-0 ${
+          isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
         <div className="p-6 border-b border-[#2d5358]">
-          <div className="flex items-center gap-2 mb-2">
-            <Shield className="w-8 h-8 text-yellow-400" />
-            <h1 className="text-2xl text-white font-bold">Rentify</h1>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <Shield className="w-8 h-8 text-yellow-400" />
+              <h1 className="text-2xl text-white font-bold">Rentify</h1>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="md:hidden text-white hover:bg-white/10 hover:text-white"
+              onClick={() => setIsSidebarOpen(false)}
+              aria-label="Close menu"
+            >
+              <X className="w-5 h-5" />
+            </Button>
           </div>
           <p className="text-sm text-yellow-400">System Admin</p>
           <p className="text-sm text-gray-300 mt-1">{adminName}</p>
@@ -117,7 +144,10 @@ export function AdminDashboard() {
           {menuItems.map((item) => (
             <button
               key={item.id}
-              onClick={() => setCurrentView(item.id)}
+              onClick={() => {
+                setCurrentView(item.id);
+                setIsSidebarOpen(false);
+              }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg mb-2 transition-colors ${
                 currentView === item.id
                   ? 'bg-yellow-400 text-[#1e3a3f] font-semibold'
@@ -150,11 +180,20 @@ export function AdminDashboard() {
       </div>
 
       {/* Main content */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto min-w-0">
         {/* Header */}
-        <div className="bg-white border-b px-8 py-4 flex items-center justify-between sticky top-0 z-10">
+        <div className="bg-white border-b px-4 md:px-8 py-4 flex items-center justify-between sticky top-0 z-20">
           <div className="flex items-center gap-4">
-            <h2 className="text-2xl font-semibold capitalize">{currentView.replace('-', ' ')}</h2>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="md:hidden"
+              onClick={() => setIsSidebarOpen(true)}
+              aria-label="Open menu"
+            >
+              <Menu className="w-5 h-5" />
+            </Button>
+            <h2 className="text-xl md:text-2xl font-semibold capitalize">{currentView.replace('-', ' ')}</h2>
             <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-semibold">
               ADMIN ACCESS
             </span>
@@ -162,7 +201,7 @@ export function AdminDashboard() {
           <NotificationCenter userType="admin" />
         </div>
 
-        <div className="p-8">
+        <div className="p-4 md:p-8">
           {currentView === 'overview' && <AdminOverview />}
           {currentView === 'users' && <UserManagement />}
           {currentView === 'properties' && <PropertyManagement />}

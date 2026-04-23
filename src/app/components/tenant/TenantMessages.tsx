@@ -36,7 +36,7 @@ export function TenantMessages() {
   const loadThread = async () => {
     try {
       setIsLoadingThread(true);
-      const response = await requestFunction('/messages/tenant/thread', {
+      const response = await requestFunction('/messages/tenant/thread?markRead=true', {
         headers: buildHeaders(),
       });
 

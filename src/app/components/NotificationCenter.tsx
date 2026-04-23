@@ -71,13 +71,18 @@ export function NotificationCenter({ userType, onNotificationClick }: Notificati
               navigateTo: 'messages',
             }));
 
+          const totalUnread = result.data.reduce(
+            (total: number, conversation: any) => total + Number(conversation.unreadCount || 0),
+            0,
+          );
+
           setNotifications(mapped);
-          setUnreadCount(mapped.length);
+          setUnreadCount(totalUnread);
           return;
         }
 
         if (userType === 'tenant') {
-          const response = await requestFunction('/messages/tenant/thread', {
+          const response = await requestFunction('/messages/tenant/thread?markRead=false', {
             headers: buildHeaders(),
           });
           const result = await response.json().catch(() => ({}));

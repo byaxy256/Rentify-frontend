@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ChangeEvent } from 'react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
@@ -24,23 +24,21 @@ interface PaymentPlan {
   }[];
 }
 
-const initialPlans: PaymentPlan[] = [];
+const buildHeaders = () => {
+  const accessToken = localStorage.getItem('accessToken');
+  return {
+    ...(accessToken ? { 'x-user-token': accessToken } : {}),
+  };
+};
 
 export function PaymentPlans() {
-  const [plans, setPlans] = useState<PaymentPlan[]>(initialPlans);
+  const [plans, setPlans] = useState<PaymentPlan[]>([]);
   const [showRequestDialog, setShowRequestDialog] = useState(false);
   const [newRequest, setNewRequest] = useState({
     amount: '',
     reason: '',
     installments: '2',
   });
-
-  const buildHeaders = () => {
-    const accessToken = localStorage.getItem('accessToken');
-    return {
-      ...(accessToken ? { 'x-user-token': accessToken } : {}),
-    };
-  };
 
   const loadPlans = async () => {
     try {
@@ -63,7 +61,16 @@ export function PaymentPlans() {
             installmentAmount: Number(plan.installmentAmount || 0),
             requestDate: plan.requestDate,
             status: plan.status,
-            payments: [],
+            startDate: plan.startDate,
+            payments: Array.isArray(plan.payments)
+              ? plan.payments.map((payment: any) => ({
+                  id: payment.id,
+                  dueDate: payment.dueDate,
+                  amount: Number(payment.amount || 0),
+                  status: payment.status,
+                  paidDate: payment.paidDate,
+                }))
+              : [],
           }))
         : [];
 
@@ -85,8 +92,7 @@ export function PaymentPlans() {
     }
 
     const amount = parseFloat(newRequest.amount);
-    const installments = parseInt(newRequest.installments);
-    const installmentAmount = amount / installments;
+    const installments = parseInt(newRequest.installments, 10);
 
     requestFunction('/payment-plans', {
       method: 'POST',
@@ -149,12 +155,14 @@ export function PaymentPlans() {
     return status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700';
   };
 
-  const activePlans = plans.filter((p) => p.status === 'approved');
-  const pendingPlans = plans.filter((p) => p.status === 'pending');
-  const totalOwed = activePlans.reduce((sum, plan) => {
+  const approvedPlans = plans.filter((plan) => plan.status === 'approved');
+  const requestedPlans = plans.filter((plan) => plan.status === 'pending');
+  const rejectedPlans = plans.filter((plan) => plan.status === 'rejected');
+
+  const totalOwed = approvedPlans.reduce((sum, plan) => {
     const unpaidAmount = plan.payments
-      .filter((p) => p.status === 'pending')
-      .reduce((s, p) => s + p.amount, 0);
+      .filter((payment) => payment.status === 'pending')
+      .reduce((running, payment) => running + payment.amount, 0);
     return sum + unpaidAmount;
   }, 0);
 
@@ -165,14 +173,13 @@ export function PaymentPlans() {
         <p className="text-gray-600">Request and manage payment installment plans</p>
       </div>
 
-      {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white rounded-xl shadow-sm p-6 border">
           <div className="flex items-center justify-between mb-2">
             <span className="text-gray-600">Active Plans</span>
             <CheckCircle className="w-5 h-5 text-green-500" />
           </div>
-          <p className="text-3xl">{activePlans.length}</p>
+          <p className="text-3xl">{approvedPlans.length}</p>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm p-6 border">
@@ -180,7 +187,7 @@ export function PaymentPlans() {
             <span className="text-gray-600">Pending Approval</span>
             <Clock className="w-5 h-5 text-yellow-500" />
           </div>
-          <p className="text-3xl">{pendingPlans.length}</p>
+          <p className="text-3xl">{requestedPlans.length}</p>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm p-6 border">
@@ -192,132 +199,154 @@ export function PaymentPlans() {
         </div>
       </div>
 
-      {/* Request New Plan */}
       <div className="bg-[#e8f4f5] border border-[#1e3a3f]/20 rounded-xl p-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4">
           <div>
             <h3 className="text-lg font-semibold mb-1">Need a Payment Plan?</h3>
-            <p className="text-sm text-gray-600">
-              Request to split your rent payment into smaller installments
-            </p>
+            <p className="text-sm text-gray-600">Request to split your rent payment into smaller installments</p>
           </div>
-          <Button
-            className="bg-[#1e3a3f] text-white hover:bg-[#2d5358]"
-            onClick={() => setShowRequestDialog(true)}
-          >
+          <Button className="bg-[#1e3a3f] text-white hover:bg-[#2d5358]" onClick={() => setShowRequestDialog(true)}>
             <Plus className="w-4 h-4 mr-2" />
             Request Plan
           </Button>
         </div>
       </div>
 
-      {/* Payment Plans List */}
-      {plans.map((plan) => (
-        <div key={plan.id} className="bg-white rounded-xl shadow-sm border">
-          <div className="p-6 border-b">
-            <div className="flex items-start justify-between">
-              <div>
-                <div className="flex items-center gap-3 mb-2">
-                  <h3 className="text-xl">Payment Plan #{plan.id}</h3>
-                  <span className={`px-3 py-1 rounded-full text-xs ${getStatusColor(plan.status)}`}>
-                    {plan.status}
-                  </span>
+      <div className="space-y-4">
+        <h3 className="text-xl font-semibold">Requested Plans</h3>
+        {requestedPlans.length === 0 ? (
+          <div className="bg-white rounded-xl shadow-sm border p-6 text-gray-600">No pending payment plan requests.</div>
+        ) : (
+          requestedPlans.map((plan) => (
+            <div key={plan.id} className="bg-white rounded-xl shadow-sm border">
+              <div className="p-6 border-b">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-3 mb-2">
+                      <h3 className="text-xl">Request #{plan.id}</h3>
+                      <span className={`px-3 py-1 rounded-full text-xs ${getStatusColor(plan.status)}`}>{plan.status}</span>
+                    </div>
+                    <p className="text-sm text-gray-600">Requested on {new Date(plan.requestDate).toLocaleDateString()}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-semibold">UGX {plan.amount.toLocaleString()}</p>
+                    <p className="text-sm text-gray-600">{plan.installments} installments</p>
+                  </div>
                 </div>
-                <p className="text-sm text-gray-600">Requested on {new Date(plan.requestDate).toLocaleDateString()}</p>
               </div>
-              <div className="text-right">
-                <p className="text-2xl font-semibold">UGX {plan.amount.toLocaleString()}</p>
-                <p className="text-sm text-gray-600">{plan.installments} installments</p>
+
+              <div className="p-6">
+                <div className="mb-4">
+                  <p className="text-sm text-gray-600 mb-1">Reason:</p>
+                  <p className="bg-gray-50 p-3 rounded-lg">{plan.reason}</p>
+                </div>
+
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-start gap-3">
+                  <Clock className="w-5 h-5 text-yellow-600 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-yellow-800">Awaiting Approval</p>
+                    <p className="text-sm text-yellow-700 mt-1">Your landlord will review your request and respond soon.</p>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          ))
+        )}
+      </div>
 
-          <div className="p-6">
-            <div className="mb-6">
-              <p className="text-sm text-gray-600 mb-1">Reason:</p>
-              <p className="bg-gray-50 p-3 rounded-lg">{plan.reason}</p>
-            </div>
+      <div className="space-y-4">
+        <h3 className="text-xl font-semibold">Approved Plans</h3>
+        {approvedPlans.length === 0 ? (
+          <div className="bg-white rounded-xl shadow-sm border p-6 text-gray-600">No approved payment plans yet.</div>
+        ) : (
+          approvedPlans.map((plan) => (
+            <div key={plan.id} className="bg-white rounded-xl shadow-sm border">
+              <div className="p-6 border-b">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-3 mb-2">
+                      <h3 className="text-xl">Approved Plan #{plan.id}</h3>
+                      <span className={`px-3 py-1 rounded-full text-xs ${getStatusColor(plan.status)}`}>{plan.status}</span>
+                    </div>
+                    <p className="text-sm text-gray-600">Approved on {new Date(plan.requestDate).toLocaleDateString()}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-semibold">UGX {plan.amount.toLocaleString()}</p>
+                    <p className="text-sm text-gray-600">{plan.installments} installments</p>
+                  </div>
+                </div>
+              </div>
 
-            {plan.status === 'approved' && plan.payments.length > 0 && (
-              <div>
-                <h4 className="font-semibold mb-3">Installment Schedule</h4>
-                <div className="space-y-2">
-                  {plan.payments.map((payment, index) => (
-                    <div
-                      key={payment.id}
-                      className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="w-8 h-8 rounded-full bg-[#1e3a3f] text-white flex items-center justify-center font-semibold">
-                          {index + 1}
-                        </div>
-                        <div>
-                          <p className="font-medium">Installment {index + 1}</p>
-                          <div className="flex items-center gap-2 text-sm text-gray-600">
-                            <Calendar className="w-4 h-4" />
-                            Due: {new Date(payment.dueDate).toLocaleDateString()}
-                            {payment.paidDate && (
-                              <span className="text-green-600">
-                                • Paid: {new Date(payment.paidDate).toLocaleDateString()}
-                              </span>
+              <div className="p-6">
+                <div className="mb-6">
+                  <p className="text-sm text-gray-600 mb-1">Reason:</p>
+                  <p className="bg-gray-50 p-3 rounded-lg">{plan.reason}</p>
+                </div>
+
+                {plan.payments.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold mb-3">Installment Schedule</h4>
+                    <div className="space-y-2">
+                      {plan.payments.map((payment, index) => (
+                        <div key={payment.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50">
+                          <div className="flex items-center gap-4">
+                            <div className="w-8 h-8 rounded-full bg-[#1e3a3f] text-white flex items-center justify-center font-semibold">{index + 1}</div>
+                            <div>
+                              <p className="font-medium">Installment {index + 1}</p>
+                              <div className="flex items-center gap-2 text-sm text-gray-600">
+                                <Calendar className="w-4 h-4" />
+                                Due: {new Date(payment.dueDate).toLocaleDateString()}
+                                {payment.paidDate && <span className="text-green-600">• Paid: {new Date(payment.paidDate).toLocaleDateString()}</span>}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <div className="text-right">
+                              <p className="font-semibold">UGX {payment.amount.toLocaleString()}</p>
+                              <span className={`px-2 py-1 rounded-full text-xs ${getPaymentStatusColor(payment.status)}`}>{payment.status}</span>
+                            </div>
+                            {payment.status === 'pending' && (
+                              <Button size="sm" className="bg-[#1e3a3f] text-white hover:bg-[#2d5358]" onClick={() => handlePayInstallment(plan.id, payment.id)}>
+                                Pay Now
+                              </Button>
                             )}
+                            {payment.status === 'paid' && <CheckCircle className="w-5 h-5 text-green-500" />}
                           </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="text-right">
-                          <p className="font-semibold">UGX {payment.amount.toLocaleString()}</p>
-                          <span className={`px-2 py-1 rounded-full text-xs ${getPaymentStatusColor(payment.status)}`}>
-                            {payment.status}
-                          </span>
-                        </div>
-                        {payment.status === 'pending' && (
-                          <Button
-                            size="sm"
-                            className="bg-[#1e3a3f] text-white hover:bg-[#2d5358]"
-                            onClick={() => handlePayInstallment(plan.id, payment.id)}
-                          >
-                            Pay Now
-                          </Button>
-                        )}
-                        {payment.status === 'paid' && (
-                          <CheckCircle className="w-5 h-5 text-green-500" />
-                        )}
-                      </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
+          ))
+        )}
+      </div>
 
-            {plan.status === 'pending' && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-start gap-3">
-                <Clock className="w-5 h-5 text-yellow-600 mt-0.5" />
-                <div>
-                  <p className="font-semibold text-yellow-800">Awaiting Approval</p>
-                  <p className="text-sm text-yellow-700 mt-1">
-                    Your landlord will review your request and respond soon.
-                  </p>
-                </div>
+      {rejectedPlans.length > 0 && (
+        <div className="space-y-4">
+          <h3 className="text-xl font-semibold">Rejected Plans</h3>
+          {rejectedPlans.map((plan) => (
+            <div key={plan.id} className="bg-white rounded-xl shadow-sm border p-6">
+              <div className="flex items-center gap-3 mb-2">
+                <h3 className="text-xl">Rejected Plan #{plan.id}</h3>
+                <span className={`px-3 py-1 rounded-full text-xs ${getStatusColor(plan.status)}`}>{plan.status}</span>
               </div>
-            )}
-
-            {plan.status === 'rejected' && (
+              <p className="text-sm text-gray-600 mb-1">Requested on {new Date(plan.requestDate).toLocaleDateString()}</p>
+              <p className="bg-gray-50 p-3 rounded-lg mb-4">{plan.reason}</p>
               <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
                 <div>
                   <p className="font-semibold text-red-800">Request Denied</p>
-                  <p className="text-sm text-red-700 mt-1">
-                    Your payment plan request was not approved. Please contact your landlord for more information.
-                  </p>
+                  <p className="text-sm text-red-700 mt-1">Your payment plan request was not approved. Please contact your landlord for more information.</p>
                 </div>
               </div>
-            )}
-          </div>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
 
-      {/* Request Dialog */}
       <Dialog open={showRequestDialog} onOpenChange={setShowRequestDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -330,7 +359,7 @@ export function PaymentPlans() {
                 type="number"
                 placeholder="Enter total amount"
                 value={newRequest.amount}
-                onChange={(e) => setNewRequest({ ...newRequest, amount: e.target.value })}
+                onChange={(event: ChangeEvent<HTMLInputElement>) => setNewRequest({ ...newRequest, amount: event.target.value })}
               />
             </div>
 
@@ -339,7 +368,7 @@ export function PaymentPlans() {
               <select
                 aria-label="Number of installments"
                 value={newRequest.installments}
-                onChange={(e) => setNewRequest({ ...newRequest, installments: e.target.value })}
+                onChange={(event: ChangeEvent<HTMLSelectElement>) => setNewRequest({ ...newRequest, installments: event.target.value })}
                 className="w-full p-2 border rounded-lg"
               >
                 <option value="2">2 installments</option>
@@ -349,8 +378,7 @@ export function PaymentPlans() {
               </select>
               {newRequest.amount && (
                 <p className="text-sm text-gray-600 mt-2">
-                  Each installment: UGX{' '}
-                  {(parseFloat(newRequest.amount) / parseInt(newRequest.installments)).toLocaleString()}
+                  Each installment: UGX {(parseFloat(newRequest.amount) / parseInt(newRequest.installments, 10)).toLocaleString()}
                 </p>
               )}
             </div>
@@ -361,21 +389,17 @@ export function PaymentPlans() {
                 className="w-full p-2 border rounded-lg min-h-[100px]"
                 placeholder="Explain why you need a payment plan..."
                 value={newRequest.reason}
-                onChange={(e) => setNewRequest({ ...newRequest, reason: e.target.value })}
+                onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setNewRequest({ ...newRequest, reason: event.target.value })}
               />
             </div>
 
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <p className="text-sm text-blue-800">
-                <strong>Note:</strong> Your request will be sent to your landlord for approval. You will be
-                notified once they respond.
+                <strong>Note:</strong> Your request will be sent to your landlord for approval. You will be notified once they respond.
               </p>
             </div>
 
-            <Button
-              className="w-full bg-[#1e3a3f] text-white hover:bg-[#2d5358]"
-              onClick={handleRequestPlan}
-            >
+            <Button className="w-full bg-[#1e3a3f] text-white hover:bg-[#2d5358]" onClick={handleRequestPlan}>
               Submit Request
             </Button>
           </div>

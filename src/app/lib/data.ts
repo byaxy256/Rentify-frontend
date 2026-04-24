@@ -65,14 +65,19 @@ export interface Bill {
 
 export interface TenantRequest {
   id: string;
+  title?: string;
+  description?: string;
   tenantName: string;
   tenantEmail: string;
   unitNumber: string;
   buildingName: string;
+  buildingId?: string;
   message: string;
+  priority?: 'low' | 'medium' | 'high';
   status: 'pending' | 'in-progress' | 'resolved';
   date: string;
   response?: string;
+  responseDate?: string;
   responseDate?: string;
 }
 

@@ -19,6 +19,8 @@ export function LeaseAgreement({ isOpen, onAccept, onClose, tenantName, readOnly
   const [hasRead, setHasRead] = useState(false);
   const [hasAccepted, setHasAccepted] = useState(false);
   const [assignment, setAssignment] = useState<any>(null);
+  const userId = localStorage.getItem('userId') || localStorage.getItem('userEmail') || 'tenant';
+  const acceptedDate = localStorage.getItem(`leaseAcceptedDate:${userId}`) || localStorage.getItem('leaseAcceptedDate');
 
   useEffect(() => {
     const loadAssignment = async () => {
@@ -377,7 +379,7 @@ export function LeaseAgreement({ isOpen, onAccept, onClose, tenantName, readOnly
           {readOnly ? (
             <>
               <p className="text-xs text-gray-500">
-                You accepted this agreement on {localStorage.getItem('leaseAcceptedDate') ? new Date(localStorage.getItem('leaseAcceptedDate')!).toLocaleDateString() : 'N/A'}
+                You accepted this agreement on {acceptedDate ? new Date(acceptedDate).toLocaleDateString() : 'N/A'}
               </p>
               <Button
                 onClick={handleClose}

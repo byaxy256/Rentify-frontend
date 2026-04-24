@@ -24,17 +24,37 @@ export function TenantDashboard() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const navigate = useNavigate();
   const userName = localStorage.getItem('userName') || 'Tenant';
+  const userId = localStorage.getItem('userId') || localStorage.getItem('userEmail') || 'tenant';
   const [showLeaseAgreement, setShowLeaseAgreement] = useState(false);
   const [showLeaseViewer, setShowLeaseViewer] = useState(false);
   const [showTenantAgreement, setShowTenantAgreement] = useState(false);
   const [requireInitialRentPayment, setRequireInitialRentPayment] = useState(false);
   const [autoOpenInitialPayment, setAutoOpenInitialPayment] = useState(false);
 
+  const leaseAcceptedKey = `hasAcceptedLease:${userId}`;
+  const leaseAcceptedDateKey = `leaseAcceptedDate:${userId}`;
+  const tenantAgreementAcceptedKey = `hasAcceptedTenantAgreement:${userId}`;
+  const initialRentPaymentKey = `hasCompletedInitialRentPayment:${userId}`;
+
+  const getScopedFlag = (scopedKey: string, legacyKey: string) => {
+    const scopedValue = localStorage.getItem(scopedKey);
+    if (scopedValue !== null) {
+      return scopedValue;
+    }
+
+    const legacyValue = localStorage.getItem(legacyKey);
+    if (legacyValue !== null) {
+      localStorage.setItem(scopedKey, legacyValue);
+    }
+
+    return legacyValue;
+  };
+
   useEffect(() => {
     // Check if tenant has accepted the lease agreement
-    const hasAcceptedLease = localStorage.getItem('hasAcceptedLease');
-    const hasAcceptedTenantAgreement = localStorage.getItem('hasAcceptedTenantAgreement');
-    const hasCompletedInitialRentPayment = localStorage.getItem('hasCompletedInitialRentPayment');
+    const hasAcceptedLease = getScopedFlag(leaseAcceptedKey, 'hasAcceptedLease');
+    const hasAcceptedTenantAgreement = getScopedFlag(tenantAgreementAcceptedKey, 'hasAcceptedTenantAgreement');
+    const hasCompletedInitialRentPayment = getScopedFlag(initialRentPaymentKey, 'hasCompletedInitialRentPayment');
     if (!hasAcceptedLease) {
       setShowLeaseAgreement(true);
     } else if (!hasAcceptedTenantAgreement) {
@@ -47,11 +67,22 @@ export function TenantDashboard() {
   }, []);
 
   const handleLogout = () => {
-    localStorage.clear();
+    [
+      'accessToken',
+      'userEmail',
+      'userRole',
+      'userName',
+      'userId',
+      'requiresPasswordChange',
+      'justChangedTempPassword',
+      'adminName',
+    ].forEach((key) => localStorage.removeItem(key));
     navigate('/');
   };
 
   const handleAcceptLease = () => {
+    localStorage.setItem(leaseAcceptedKey, 'true');
+    localStorage.setItem(leaseAcceptedDateKey, new Date().toISOString());
     localStorage.setItem('hasAcceptedLease', 'true');
     localStorage.setItem('leaseAcceptedDate', new Date().toISOString());
     setShowLeaseAgreement(false);
@@ -62,6 +93,7 @@ export function TenantDashboard() {
   };
 
   const handleAcceptTenantAgreement = () => {
+    localStorage.setItem(tenantAgreementAcceptedKey, 'true');
     localStorage.setItem('hasAcceptedTenantAgreement', 'true');
     setShowTenantAgreement(false);
     setRequireInitialRentPayment(true);
@@ -71,6 +103,7 @@ export function TenantDashboard() {
   };
 
   const handleInitialPaymentCompleted = () => {
+    localStorage.setItem(initialRentPaymentKey, 'true');
     localStorage.setItem('hasCompletedInitialRentPayment', 'true');
     setRequireInitialRentPayment(false);
     setAutoOpenInitialPayment(false);

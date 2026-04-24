@@ -16,6 +16,7 @@ export function RentPayment({ autoOpenInitialPayment = false, onInitialPaymentCo
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [paymentPurpose, setPaymentPurpose] = useState<'rent' | 'security'>('rent');
   const [paymentMethod, setPaymentMethod] = useState<'mtn' | 'airtel' | 'bank'>('mtn');
+  const [rentMonths, setRentMonths] = useState<1 | 2 | 3>(3);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [hasAutoOpened, setHasAutoOpened] = useState(false);
@@ -48,6 +49,8 @@ export function RentPayment({ autoOpenInitialPayment = false, onInitialPaymentCo
       const hasRentAssignment = Number(assignmentData?.rent || 0) > 0;
       const isFirstRentPayment = completedRentPayments.length === 0;
 
+      setRentMonths(isFirstRentPayment ? 3 : 1);
+
       onPaymentDataLoaded?.({ hasRentAssignment, isFirstRentPayment });
 
       if (autoOpenInitialPayment && hasRentAssignment && isFirstRentPayment && !hasAutoOpened) {
@@ -75,7 +78,7 @@ export function RentPayment({ autoOpenInitialPayment = false, onInitialPaymentCo
   const nextDueDate = assignment?.nextDueDate || null;
   const completedRentPayments = payments.filter((payment) => payment.type === 'rent' && payment.status === 'completed');
   const isFirstRentPayment = completedRentPayments.length === 0;
-  const rentPaymentAmount = rentAmount * (isFirstRentPayment ? 3 : 1);
+  const rentPaymentAmount = rentAmount * rentMonths;
   const amountToPay = paymentPurpose === 'security' ? securityDepositAmount : rentPaymentAmount;
   const hasRentAssignment = rentAmount > 0;
   const unitInfo = {
@@ -96,6 +99,7 @@ export function RentPayment({ autoOpenInitialPayment = false, onInitialPaymentCo
         body: JSON.stringify({
           method: paymentMethod,
           phoneNumber: paymentMethod === 'bank' ? null : phoneNumber,
+          monthsCovered: paymentPurpose === 'rent' ? rentMonths : undefined,
         }),
       });
 
@@ -215,10 +219,28 @@ export function RentPayment({ autoOpenInitialPayment = false, onInitialPaymentCo
                 <span className="text-xl">UGX {amountToPay.toLocaleString()}</span>
               </div>
               {paymentPurpose === 'rent' && (
-                <div className="flex items-center justify-between mt-2">
-                  <span className="text-gray-600">Due Date</span>
-                  <span>{nextDueDate ? new Date(nextDueDate).toLocaleDateString() : 'Not set'}</span>
-                </div>
+                <>
+                  <div>
+                    <label className="text-sm text-gray-700 mb-2 block">Pay for how many months?</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[1, 2, 3].map((months) => (
+                        <button
+                          key={months}
+                          onClick={() => setRentMonths(months as 1 | 2 | 3)}
+                          className={`p-3 border rounded-lg text-center transition-colors ${
+                            rentMonths === months ? 'border-[#1e3a3f] bg-[#e8f4f5]' : 'border-gray-200'
+                          }`}
+                        >
+                          <p className="text-sm">{months} {months === 1 ? 'Month' : 'Months'}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between mt-2">
+                    <span className="text-gray-600">Due Date</span>
+                    <span>{nextDueDate ? new Date(nextDueDate).toLocaleDateString() : 'Not set'}</span>
+                  </div>
+                </>
               )}
             </div>
 

@@ -88,7 +88,15 @@ export function AdminDashboard() {
   }, [navigate]);
 
   const handleLogout = () => {
-    localStorage.clear();
+    [
+      'accessToken',
+      'adminName',
+      'userEmail',
+      'userRole',
+      'userName',
+      'userId',
+      'requiresPasswordChange',
+    ].forEach((key) => localStorage.removeItem(key));
     navigate('/');
   };
 

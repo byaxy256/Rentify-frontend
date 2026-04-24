@@ -4,27 +4,19 @@ import { Textarea } from '../ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { MessageSquare, Clock, CheckCircle, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { dataStore, type TenantRequest as StoredTenantRequest } from '../../lib/data';
 
-interface TenantRequest {
-  id: string;
-  tenantName: string;
+interface TenantRequest extends StoredTenantRequest {
   unit: string;
   building: string;
-  buildingId?: string;
-  message: string;
-  date: string;
-  status: 'pending' | 'in-progress' | 'resolved';
-  response?: string;
 }
-
-const mockRequests: TenantRequest[] = [];
 
 interface TenantRequestsProps {
   selectedProperty?: string;
 }
 
 export function TenantRequests({ selectedProperty = 'all' }: TenantRequestsProps) {
-  const allRequests = mockRequests;
+  const allRequests = dataStore.getRequests() as TenantRequest[];
 
   // Filter by selected property
   const filteredRequests = selectedProperty === 'all'
@@ -41,6 +33,9 @@ export function TenantRequests({ selectedProperty = 'all' }: TenantRequestsProps
   useEffect(() => {
     setRequests(filteredRequests);
   }, [selectedProperty]);
+  useEffect(() => {
+    setRequests(filteredRequests);
+  }, [selectedProperty, allRequests.length]);
   const [showResponseDialog, setShowResponseDialog] = useState(false);
   const [response, setResponse] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -59,11 +54,15 @@ export function TenantRequests({ selectedProperty = 'all' }: TenantRequestsProps
 
     setIsLoading(true);
     setTimeout(() => {
-      setRequests(requests.map(req =>
+      const updatedRequests = requests.map(req =>
         req.id === selectedRequest.id
-          ? { ...req, response, status: 'in-progress' as const }
+          ? { ...req, response, responseDate: new Date().toISOString(), status: 'in-progress' as const }
           : req
-      ));
+      );
+      updatedRequests.forEach((req) => {
+        dataStore.updateRequest(req.id, req as any);
+      });
+      setRequests(updatedRequests);
       toast.success('Response sent to tenant');
       setShowResponseDialog(false);
       setResponse('');
@@ -72,9 +71,13 @@ export function TenantRequests({ selectedProperty = 'all' }: TenantRequestsProps
   };
 
   const markAsResolved = (requestId: string) => {
-    setRequests(requests.map(req =>
-      req.id === requestId ? { ...req, status: 'resolved' as const } : req
-    ));
+    const updatedRequests = requests.map(req =>
+      req.id === requestId ? { ...req, status: 'resolved' as const, responseDate: new Date().toISOString() } : req
+    );
+    updatedRequests.forEach((req) => {
+      dataStore.updateRequest(req.id, req as any);
+    });
+    setRequests(updatedRequests);
     toast.success('Request marked as resolved');
   };
 
@@ -127,7 +130,7 @@ export function TenantRequests({ selectedProperty = 'all' }: TenantRequestsProps
               <div className="flex items-start gap-4">
                 <MessageSquare className="w-6 h-6 text-gray-400 mt-1" />
                 <div>
-                  <h3 className="text-lg mb-1">{request.tenantName}</h3>
+                  <h3 className="text-lg mb-1">{request.title || request.tenantName}</h3>
                   <p className="text-sm text-gray-600">
                     {request.building} - Unit {request.unit}
                   </p>
@@ -152,7 +155,8 @@ export function TenantRequests({ selectedProperty = 'all' }: TenantRequestsProps
             </div>
 
             <div className="bg-gray-50 rounded-lg p-4 mb-4">
-              <p className="text-gray-700">{request.message}</p>
+              <p className="font-medium text-gray-900 mb-1">{request.title || 'Request'}</p>
+              <p className="text-gray-700">{request.description || request.message}</p>
             </div>
 
             {request.response && (

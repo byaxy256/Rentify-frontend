@@ -259,6 +259,37 @@ export function BuildingManagement({ selectedProperty = 'all', onBuildingsUpdate
     }
   };
 
+  const handleUnassignTenant = async (unitId: string, unitNumber: string) => {
+    const confirmed = window.confirm(`Unassign the tenant from unit ${unitNumber}?`);
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const accessToken = localStorage.getItem('accessToken');
+      const response = await requestFunction(`/units/${unitId}/unassign-tenant`, {
+        method: 'POST',
+        headers: {
+          ...(accessToken ? { 'x-user-token': accessToken } : {}),
+        },
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        toast.error(result?.message || 'Failed to unassign tenant');
+        return;
+      }
+
+      await loadBuildings();
+      onBuildingsUpdated?.();
+      await loadUnassignedTenants();
+      toast.success(result?.message || `Tenant unassigned from unit ${unitNumber}`);
+    } catch (error) {
+      console.error('Unassign tenant error:', error);
+      toast.error('Failed to unassign tenant');
+    }
+  };
+
   const totalUnits = floorConfigs.reduce((sum, config) => sum + config.unitsCount, 0);
 
   return (
@@ -346,7 +377,7 @@ export function BuildingManagement({ selectedProperty = 'all', onBuildingsUpdate
                             UGX {(unit.rent / 1000).toFixed(0)}K/mo
                           </p>
                           {unit.isOccupied && unit.tenant ? (
-                            <div className="text-xs">
+                            <div className="text-xs space-y-3">
                               <p className="font-medium text-gray-900">{unit.tenant.name}</p>
                               <p className="text-gray-600">{unit.tenant.phone}</p>
                               {unit.tenant.email && (
@@ -355,6 +386,17 @@ export function BuildingManagement({ selectedProperty = 'all', onBuildingsUpdate
                               {unit.tenant.occupation && (
                                 <p className="text-gray-500 mt-1">{unit.tenant.occupation}</p>
                               )}
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                className="w-full text-xs"
+                                onClick={async (event) => {
+                                  event.stopPropagation();
+                                  await handleUnassignTenant(unit.id, unit.unitNumber);
+                                }}
+                              >
+                                Unassign Tenant
+                              </Button>
                             </div>
                           ) : (
                             <Button

@@ -200,7 +200,16 @@ export function LandlordDashboard() {
   };
 
   const handleLogout = () => {
-    localStorage.clear();
+    [
+      'accessToken',
+      'userEmail',
+      'userRole',
+      'userName',
+      'userId',
+      'requiresPasswordChange',
+      'justChangedTempPassword',
+      'landlordOnboardingComplete',
+    ].forEach((key) => localStorage.removeItem(key));
     navigate('/');
   };
 

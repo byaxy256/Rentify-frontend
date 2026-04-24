@@ -1,30 +1,58 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
 import { Input } from '../ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { MessageSquare, Clock, CheckCircle, AlertTriangle, Plus } from 'lucide-react';
 import { toast } from 'sonner';
+import { requestFunction } from '../../lib/functionClient';
+import { dataStore, type TenantRequest as StoredTenantRequest } from '../../lib/data';
 
-interface Request {
-  id: string;
-  title: string;
-  description: string;
-  date: string;
-  status: 'pending' | 'in-progress' | 'resolved';
-  priority: 'low' | 'medium' | 'high';
-  response?: string;
+interface Request extends StoredTenantRequest {
+  title?: string;
+  description?: string;
 }
 
-const initialRequests: Request[] = [];
+const buildHeaders = () => {
+  const accessToken = localStorage.getItem('accessToken');
+  return {
+    ...(accessToken ? { 'x-user-token': accessToken } : {}),
+  };
+};
 
 export function TenantRequestsView() {
-  const [requests, setRequests] = useState<Request[]>(initialRequests);
+  const [requests, setRequests] = useState<Request[]>(() => dataStore.getRequests() as Request[]);
   const [showNewRequestDialog, setShowNewRequestDialog] = useState(false);
   const [newRequestTitle, setNewRequestTitle] = useState('');
   const [newRequestDescription, setNewRequestDescription] = useState('');
   const [newRequestPriority, setNewRequestPriority] = useState<'low' | 'medium' | 'high'>('medium');
   const [isLoading, setIsLoading] = useState(false);
+  const [assignment, setAssignment] = useState<{ unit?: string; building?: string; buildingId?: string } | null>(null);
+
+  useEffect(() => {
+    const loadAssignment = async () => {
+      try {
+        const response = await requestFunction('/tenants/me/assignment', {
+          headers: buildHeaders(),
+        });
+
+        const result = await response.json().catch(() => ({}));
+        if (response.ok) {
+          setAssignment(result.data || null);
+        }
+      } catch {
+        setAssignment(null);
+      }
+    };
+
+    loadAssignment();
+    setRequests(dataStore.getRequests() as Request[]);
+  }, []);
+
+  const syncRequests = (updatedRequests: Request[]) => {
+    setRequests(updatedRequests);
+    localStorage.setItem('tenantRequests', JSON.stringify(updatedRequests));
+  };
 
   const submitRequest = () => {
     if (!newRequestTitle.trim() || !newRequestDescription.trim()) {
@@ -35,14 +63,22 @@ export function TenantRequestsView() {
     setIsLoading(true);
     setTimeout(() => {
       const newRequest: Request = {
-        id: String(requests.length + 1),
+        id: String(Date.now()),
         title: newRequestTitle,
         description: newRequestDescription,
+        tenantName: localStorage.getItem('userName') || 'Tenant',
+        tenantEmail: localStorage.getItem('userEmail') || '',
+        unitNumber: assignment?.unit || 'Not assigned',
+        buildingName: assignment?.building || 'Not assigned',
+        buildingId: assignment?.buildingId,
+        message: `${newRequestTitle}: ${newRequestDescription}`,
+        priority: newRequestPriority,
         date: new Date().toISOString().split('T')[0],
         status: 'pending',
-        priority: newRequestPriority,
       };
-      setRequests([newRequest, ...requests]);
+      const updated = [newRequest, ...requests];
+      dataStore.addRequest(newRequest as any);
+      syncRequests(updated);
       toast.success('Request submitted successfully');
       setShowNewRequestDialog(false);
       setNewRequestTitle('');
@@ -53,9 +89,9 @@ export function TenantRequestsView() {
   };
 
   const totalRequests = requests.length;
-  const pendingCount = requests.filter(r => r.status === 'pending').length;
-  const inProgressCount = requests.filter(r => r.status === 'in-progress').length;
-  const resolvedCount = requests.filter(r => r.status === 'resolved').length;
+  const pendingCount = requests.filter((request) => request.status === 'pending').length;
+  const inProgressCount = requests.filter((request) => request.status === 'in-progress').length;
+  const resolvedCount = requests.filter((request) => request.status === 'resolved').length;
 
   return (
     <div className="space-y-6">
@@ -63,7 +99,6 @@ export function TenantRequestsView() {
         <h2 className="text-3xl mb-2">Requests</h2>
       </div>
 
-      {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl shadow-sm p-6 border">
           <div className="flex items-start justify-between">
@@ -114,32 +149,24 @@ export function TenantRequestsView() {
         </div>
       </div>
 
-      {/* Your Requests Section */}
       <div className="bg-white rounded-xl shadow-sm border p-6">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h3 className="text-xl mb-1">Your Requests</h3>
             <p className="text-sm text-gray-600">Submit and track maintenance requests</p>
           </div>
-          <Button 
-            className="bg-black text-white hover:bg-gray-800"
-            onClick={() => setShowNewRequestDialog(true)}
-          >
+          <Button className="bg-black text-white hover:bg-gray-800" onClick={() => setShowNewRequestDialog(true)}>
             <Plus className="w-4 h-4 mr-2" />
             New Request
           </Button>
         </div>
 
-        {/* Requests List */}
         <div className="space-y-4">
           {requests.map((request) => (
-            <div
-              key={request.id}
-              className="border rounded-xl p-6"
-            >
+            <div key={request.id} className="border rounded-xl p-6">
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">
-                  <h4 className="text-lg">{request.title}</h4>
+                  <h4 className="text-lg">{request.title || 'Request'}</h4>
                   <span
                     className={`px-3 py-1 rounded-md text-xs text-white ${
                       request.priority === 'high'
@@ -149,7 +176,7 @@ export function TenantRequestsView() {
                         : 'bg-gray-600'
                     }`}
                   >
-                    {request.priority} priority
+                    {request.priority || 'medium'} priority
                   </span>
                 </div>
                 <span
@@ -172,7 +199,7 @@ export function TenantRequestsView() {
 
               <div className="mb-4">
                 <p className="text-sm mb-2">Description:</p>
-                <p className="text-sm text-gray-700">{request.description}</p>
+                <p className="text-sm text-gray-700">{request.description || request.message}</p>
               </div>
 
               {request.status === 'pending' && (
@@ -194,7 +221,6 @@ export function TenantRequestsView() {
         </div>
       </div>
 
-      {/* New Request Dialog */}
       <Dialog open={showNewRequestDialog} onOpenChange={setShowNewRequestDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -202,24 +228,20 @@ export function TenantRequestsView() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="text-sm text-gray-700 mb-2 block">
-                Request Title
-              </label>
+              <label className="text-sm text-gray-700 mb-2 block">Request Title</label>
               <Input
                 value={newRequestTitle}
-                onChange={(e) => setNewRequestTitle(e.target.value)}
+                onChange={(event) => setNewRequestTitle(event.target.value)}
                 placeholder="e.g., WiFi not working, Water leak, etc."
               />
             </div>
 
             <div>
-              <label className="text-sm text-gray-700 mb-2 block">
-                Priority
-              </label>
+              <label className="text-sm text-gray-700 mb-2 block">Priority</label>
               <select
                 aria-label="Request priority"
                 value={newRequestPriority}
-                onChange={(e) => setNewRequestPriority(e.target.value as any)}
+                onChange={(event) => setNewRequestPriority(event.target.value as any)}
                 className="w-full p-2 border rounded-lg"
               >
                 <option value="low">Low Priority</option>
@@ -229,22 +251,16 @@ export function TenantRequestsView() {
             </div>
 
             <div>
-              <label className="text-sm text-gray-700 mb-2 block">
-                Description
-              </label>
+              <label className="text-sm text-gray-700 mb-2 block">Description</label>
               <Textarea
                 value={newRequestDescription}
-                onChange={(e) => setNewRequestDescription(e.target.value)}
+                onChange={(event) => setNewRequestDescription(event.target.value)}
                 placeholder="Please provide details about your request..."
                 rows={5}
               />
             </div>
 
-            <Button
-              className="w-full"
-              onClick={submitRequest}
-              disabled={isLoading || !newRequestTitle.trim() || !newRequestDescription.trim()}
-            >
+            <Button className="w-full" onClick={submitRequest} disabled={isLoading || !newRequestTitle.trim() || !newRequestDescription.trim()}>
               {isLoading ? 'Submitting...' : 'Submit Request'}
             </Button>
           </div>

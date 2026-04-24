@@ -46,70 +46,123 @@ export function NotificationCenter({ userType, onNotificationClick }: Notificati
 
     const loadNotifications = async () => {
       try {
+        const allNotifications: Notification[] = [];
+
         if (userType === 'landlord' || userType === 'admin') {
+          // Load unread messages
           const response = await requestFunction('/messages/landlord/conversations', {
             headers: buildHeaders(),
           });
           const result = await response.json().catch(() => ({}));
 
-          if (!response.ok || !Array.isArray(result?.data)) {
-            setNotifications([]);
-            setUnreadCount(0);
-            return;
+          if (response.ok && Array.isArray(result?.data)) {
+            const messageNotifs: Notification[] = result.data
+              .filter((conversation: any) => Number(conversation.unreadCount || 0) > 0)
+              .map((conversation: any) => {
+                const priority = Number(conversation.unreadCount || 0) > 2 ? 'high' : 'medium';
+                return {
+                  id: `msg-${conversation.tenantId}`,
+                  type: 'message' as const,
+                  title: `New message from ${conversation.name}`,
+                  message: conversation.lastMessage || `${conversation.unreadCount} unread message(s)`,
+                  timestamp: conversation.lastMessageTime ? new Date(conversation.lastMessageTime) : new Date(),
+                  read: false,
+                  priority: priority as 'high' | 'medium' | 'low',
+                  navigateTo: 'messages',
+                };
+              });
+            allNotifications.push(...messageNotifs);
           }
 
-          const mapped: Notification[] = result.data
-            .filter((conversation: any) => Number(conversation.unreadCount || 0) > 0)
-            .map((conversation: any) => ({
-              id: `msg-${conversation.tenantId}`,
-              type: 'message',
-              title: `New message from ${conversation.name}`,
-              message: conversation.lastMessage || `${conversation.unreadCount} unread message(s)`,
-              timestamp: conversation.lastMessageTime ? new Date(conversation.lastMessageTime) : new Date(),
-              read: false,
-              priority: Number(conversation.unreadCount || 0) > 2 ? 'high' : 'medium',
-              navigateTo: 'messages',
-            }));
-
-          const totalUnread = result.data.reduce(
-            (total: number, conversation: any) => total + Number(conversation.unreadCount || 0),
-            0,
-          );
-
-          setNotifications(mapped);
-          setUnreadCount(totalUnread);
+          setNotifications(allNotifications);
+          setUnreadCount(allNotifications.length);
           return;
         }
 
         if (userType === 'tenant') {
+          // Load unread messages
           const response = await requestFunction('/messages/tenant/thread?markRead=false', {
             headers: buildHeaders(),
           });
           const result = await response.json().catch(() => ({}));
 
-          if (!response.ok || !Array.isArray(result?.data?.messages)) {
-            setNotifications([]);
-            setUnreadCount(0);
-            return;
+          if (response.ok && Array.isArray(result?.data?.messages)) {
+            const unreadMessages = result.data.messages.filter(
+              (message: any) => message.senderType === 'landlord' && !message.read,
+            );
+
+            const messageNotifs: Notification[] = unreadMessages.map((message: any) => ({
+              id: `msg-${message.id}`,
+              type: 'message' as const,
+              title: 'New message from Property Manager',
+              message: message.message || 'You have a new message',
+              timestamp: message.timestamp ? new Date(message.timestamp) : new Date(),
+              read: false,
+              priority: 'medium' as const,
+              navigateTo: 'messages',
+            }));
+            allNotifications.push(...messageNotifs);
           }
 
-          const unreadMessages = result.data.messages.filter(
-            (message: any) => message.senderType === 'landlord' && !message.read,
-          );
+          // Load pending bills
+          try {
+            const billsResponse = await requestFunction('/bills/tenant', {
+              headers: buildHeaders(),
+            });
+            const billsResult = await billsResponse.json().catch(() => ({}));
 
-          const mapped: Notification[] = unreadMessages.map((message: any) => ({
-            id: `msg-${message.id}`,
-            type: 'message',
-            title: 'New message from Property Manager',
-            message: message.message || 'You have a new message',
-            timestamp: message.timestamp ? new Date(message.timestamp) : new Date(),
-            read: false,
-            priority: 'medium',
-            navigateTo: 'messages',
-          }));
+            if (billsResponse.ok && Array.isArray(billsResult?.data)) {
+              const pendingBills = billsResult.data.filter((bill: any) => bill.status === 'pending');
+              const billNotifs: Notification[] = pendingBills.map((bill: any) => ({
+                id: `bill-${bill.id}`,
+                type: 'payment' as const,
+                title: `${bill.type.charAt(0).toUpperCase() + bill.type.slice(1)} Bill Due`,
+                message: `Amount: UGX ${Number(bill.amount).toLocaleString()}`,
+                timestamp: bill.dueDate ? new Date(bill.dueDate) : new Date(),
+                read: false,
+                priority: 'medium' as const,
+                navigateTo: 'utility-bills',
+              }));
+              allNotifications.push(...billNotifs);
+            }
+          } catch {
+            // Bills endpoint may not exist, continue
+          }
 
-          setNotifications(mapped);
-          setUnreadCount(mapped.length);
+          // Load pending payment reminders (if tenant has outstanding rent)
+          try {
+            const assignmentResponse = await requestFunction('/tenants/assignment', {
+              headers: buildHeaders(),
+            });
+            const assignmentResult = await assignmentResponse.json().catch(() => ({}));
+
+            if (assignmentResponse.ok && assignmentResult?.data) {
+              const assignment = assignmentResult.data;
+              if (assignment.nextRentDueDate) {
+                const dueDate = new Date(assignment.nextRentDueDate);
+                const now = new Date();
+                const daysUntilDue = Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                
+                if (daysUntilDue <= 7 && daysUntilDue > 0) {
+                  allNotifications.push({
+                    id: 'rent-reminder',
+                    type: 'payment',
+                    title: 'Rent Payment Reminder',
+                    message: `Rent due in ${daysUntilDue} day${daysUntilDue !== 1 ? 's' : ''}`,
+                    timestamp: now,
+                    read: false,
+                    priority: daysUntilDue <= 3 ? 'high' : 'medium',
+                    navigateTo: 'pay-rent',
+                  });
+                }
+              }
+            }
+          } catch {
+            // Assignment endpoint may not exist, continue
+          }
+
+          setNotifications(allNotifications);
+          setUnreadCount(allNotifications.filter(n => !n.read).length);
           return;
         }
 

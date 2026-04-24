@@ -60,6 +60,7 @@ export function AuthPage() {
   const [occupants, setOccupants] = useState('1');
   const [nextOfKin, setNextOfKin] = useState('');
   const [nextOfKinContact, setNextOfKinContact] = useState('');
+  const [buildingName, setBuildingName] = useState('');
   const [role, setRole] = useState<'landlord' | 'tenant'>('tenant');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -288,6 +289,7 @@ export function AuthPage() {
           occupants: parseInt(occupants),
           nextOfKin,
           nextOfKinContact,
+          buildingName,
         }),
       });
 
@@ -311,6 +313,7 @@ export function AuthPage() {
       setOccupants('1');
       setNextOfKin('');
       setNextOfKinContact('');
+      setBuildingName('');
       setIsLoading(false);
     } catch (error) {
       console.error('Signup error:', error);
@@ -619,6 +622,18 @@ export function AuthPage() {
                     onChange={(e) => setNextOfKinContact(e.target.value)}
                     required
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm text-gray-700">Building Name</label>
+                  <Input
+                    type="text"
+                    placeholder="e.g., Sunset Heights, Kampala Central"
+                    value={buildingName}
+                    onChange={(e) => setBuildingName(e.target.value)}
+                    required
+                  />
+                  <p className="text-xs text-gray-500">The name of the building you will be renting in</p>
                 </div>
               </>
             )}

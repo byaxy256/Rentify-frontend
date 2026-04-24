@@ -202,6 +202,7 @@ export async function handleSignup(request: Request) {
       occupants,
       nextOfKin,
       nextOfKinContact,
+      buildingName,
     } = body;
 
     if (!email || !password) {
@@ -247,15 +248,45 @@ export async function handleSignup(request: Request) {
         return errorResponse('Signup Failed', tenantDetailsError.message, 500);
       }
 
-      // Auto-assign tenant to first available unoccupied unit
-      const { data: availableUnit, error: availableUnitError } = await supabase
-        .from('units')
-        .select('id, building_id, unit_number, rent')
-        .eq('is_occupied', false)
-        .limit(1)
-        .single();
+      // Auto-assign tenant to first available unit in the specified building
+      let availableUnit = null;
 
-      if (!availableUnitError && availableUnit) {
+      if (buildingName) {
+        // Find building by name and get first available unit
+        const { data: building, error: buildingError } = await supabase
+          .from('buildings')
+          .select('id')
+          .ilike('name', `%${buildingName}%`)
+          .maybeSingle();
+
+        if (!buildingError && building) {
+          const { data: unit, error: unitError } = await supabase
+            .from('units')
+            .select('id, building_id, unit_number, rent')
+            .eq('building_id', building.id)
+            .eq('is_occupied', false)
+            .limit(1)
+            .single();
+
+          if (!unitError && unit) {
+            availableUnit = unit;
+          }
+        }
+      } else {
+        // If no building specified, get first available unit from any building (fallback)
+        const { data: unit, error: unitError } = await supabase
+          .from('units')
+          .select('id, building_id, unit_number, rent')
+          .eq('is_occupied', false)
+          .limit(1)
+          .single();
+
+        if (!unitError && unit) {
+          availableUnit = unit;
+        }
+      }
+
+      if (availableUnit) {
         const today = new Date().toISOString().split('T')[0];
         const leaseEndDate = new Date(today);
         leaseEndDate.setMonth(leaseEndDate.getMonth() + 3);
@@ -308,6 +339,7 @@ export async function handleSignup(request: Request) {
               buildingId: availableUnit.building_id,
               unitNumber: availableUnit.unit_number,
               tenantEmail: email,
+              buildingNameRequested: buildingName,
             },
           });
         }

@@ -246,6 +246,72 @@ export async function handleSignup(request: Request) {
       if (tenantDetailsError) {
         return errorResponse('Signup Failed', tenantDetailsError.message, 500);
       }
+
+      // Auto-assign tenant to first available unoccupied unit
+      const { data: availableUnit, error: availableUnitError } = await supabase
+        .from('units')
+        .select('id, building_id, unit_number, rent')
+        .eq('is_occupied', false)
+        .limit(1)
+        .single();
+
+      if (!availableUnitError && availableUnit) {
+        const today = new Date().toISOString().split('T')[0];
+        const leaseEndDate = new Date(today);
+        leaseEndDate.setMonth(leaseEndDate.getMonth() + 3);
+
+        // Update tenant_details with lease dates and rent
+        const { error: tenantLeaseError } = await supabase
+          .from('tenant_details')
+          .update({
+            assigned_date: today,
+            lease_start_date: today,
+            lease_end_date: leaseEndDate.toISOString().split('T')[0],
+            security_deposit: availableUnit.rent || 0,
+          })
+          .eq('tenant_id', authData.user.id);
+
+        if (!tenantLeaseError) {
+          // Assign tenant to unit
+          await supabase
+            .from('units')
+            .update({
+              tenant_id: authData.user.id,
+              is_occupied: true,
+            })
+            .eq('id', availableUnit.id);
+
+          // Update building occupancy count
+          const { count: occupiedCount } = await supabase
+            .from('units')
+            .select('id', { count: 'exact', head: true })
+            .eq('building_id', availableUnit.building_id)
+            .eq('is_occupied', true);
+
+          await supabase
+            .from('buildings')
+            .update({ occupied_units: occupiedCount || 0 })
+            .eq('id', availableUnit.building_id);
+
+          // Log the auto-assignment
+          await logAuditEvent({
+            request,
+            actorUserId: 'system',
+            actorEmail: 'system@rentify.com',
+            action: 'AUTO_ASSIGN_TENANT',
+            entityType: 'unit',
+            entityId: availableUnit.id,
+            details: `Auto-assigned tenant ${full_name} to unit ${availableUnit.unit_number}`,
+            status: 'success',
+            metadata: {
+              tenantId: authData.user.id,
+              buildingId: availableUnit.building_id,
+              unitNumber: availableUnit.unit_number,
+              tenantEmail: email,
+            },
+          });
+        }
+      }
     }
 
     // Prepare response user data

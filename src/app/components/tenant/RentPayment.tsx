@@ -77,6 +77,12 @@ export function RentPayment({ autoOpenInitialPayment = false, onInitialPaymentCo
   const securityDepositAmount = Number(assignment?.securityDeposit || rentAmount || 0);
   const nextDueDate = assignment?.nextDueDate || null;
   const completedRentPayments = payments.filter((payment) => payment.type === 'rent' && payment.status === 'completed');
+  const completedPayments = payments.filter((payment) => payment.status === 'completed');
+  const hasPaidSecurityDeposit = completedPayments.some((payment) =>
+    payment.displayType === 'security_deposit' ||
+    payment.type === 'security_deposit' ||
+    String(payment.receiptNumber || '').startsWith('SEC-'),
+  );
   const isFirstRentPayment = completedRentPayments.length === 0;
   const rentPaymentAmount = rentAmount * rentMonths;
   const amountToPay = paymentPurpose === 'security' ? securityDepositAmount : rentPaymentAmount;
@@ -187,14 +193,17 @@ export function RentPayment({ autoOpenInitialPayment = false, onInitialPaymentCo
               setPaymentPurpose('security');
               setShowPaymentDialog(true);
             }}
-            disabled={!securityDepositAmount}
+            disabled={!securityDepositAmount || hasPaidSecurityDeposit}
           >
             <CreditCard className="w-5 h-5 mr-2" />
-            Pay Security Deposit
+            {hasPaidSecurityDeposit ? 'Security Deposit Paid' : 'Pay Security Deposit'}
           </Button>
         </div>
         {!hasRentAssignment && (
           <p className="text-sm text-gray-600 mt-3">No rent assignment found for this account yet.</p>
+        )}
+        {hasPaidSecurityDeposit && (
+          <p className="text-sm text-green-700 mt-3">Security deposit has already been paid for this tenancy.</p>
         )}
       </div>
 
@@ -230,19 +239,16 @@ export function RentPayment({ autoOpenInitialPayment = false, onInitialPaymentCo
                   ) : (
                     <div>
                       <label className="text-sm text-gray-700 mb-2 block">Pay for how many months?</label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {[1, 2, 3].map((months) => (
-                          <button
-                            key={months}
-                            onClick={() => setRentMonths(months as 1 | 2 | 3)}
-                            className={`p-3 border rounded-lg text-center transition-colors ${
-                              rentMonths === months ? 'border-[#1e3a3f] bg-[#e8f4f5]' : 'border-gray-200'
-                            }`}
-                          >
-                            <p className="text-sm">{months} {months === 1 ? 'Month' : 'Months'}</p>
-                          </button>
-                        ))}
-                      </div>
+                      <select
+                        aria-label="Select rent months"
+                        value={rentMonths}
+                        onChange={(event) => setRentMonths(Number(event.target.value) as 1 | 2 | 3)}
+                        className="w-full p-3 border rounded-lg"
+                      >
+                        <option value={1}>1 month</option>
+                        <option value={2}>2 months</option>
+                        <option value={3}>3 months</option>
+                      </select>
                     </div>
                   )}
                   <div className="flex items-center justify-between mt-2">
@@ -303,7 +309,7 @@ export function RentPayment({ autoOpenInitialPayment = false, onInitialPaymentCo
                   isLoading ||
                   (paymentMethod !== 'bank' && !phoneNumber) ||
                   (paymentPurpose === 'rent' && !hasRentAssignment) ||
-                  (paymentPurpose === 'security' && !securityDepositAmount)
+                  (paymentPurpose === 'security' && (!securityDepositAmount || hasPaidSecurityDeposit))
                 }
               >
                 {isLoading ? 'Processing...' : `Pay UGX ${amountToPay.toLocaleString()}`}
@@ -330,17 +336,20 @@ export function RentPayment({ autoOpenInitialPayment = false, onInitialPaymentCo
               </tr>
             </thead>
             <tbody>
-              {completedRentPayments.length === 0 && (
+              {completedPayments.length === 0 && (
                 <tr>
                   <td colSpan={5} className="p-6 text-sm text-gray-600">
-                    No rent payment history available.
+                    No payment history available.
                   </td>
                 </tr>
               )}
-              {completedRentPayments.map((payment) => (
+              {completedPayments.map((payment) => (
                 <tr key={payment.id} className="border-b hover:bg-gray-50">
                   <td className="p-4 text-sm">{new Date(payment.date).toLocaleDateString()}</td>
-                  <td className="p-4 text-sm">UGX {Number(payment.amount || 0).toLocaleString()}</td>
+                  <td className="p-4 text-sm">
+                    <div>UGX {Number(payment.amount || 0).toLocaleString()}</div>
+                    <div className="text-xs text-gray-500 capitalize">{payment.displayType || payment.type}</div>
+                  </td>
                   <td className="p-4 text-sm">{payment.method}</td>
                   <td className="p-4 text-sm text-green-600">Paid</td>
                   <td className="p-4 text-sm">{payment.receiptNumber || '—'}</td>

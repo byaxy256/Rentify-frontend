@@ -14,7 +14,6 @@ import { WiFiBilling } from './tenant/WiFiBilling';
 import { LeaseAgreement } from './tenant/LeaseAgreement';
 import { TenantProfile } from './tenant/TenantProfile';
 import { TenantAgreement } from './tenant/TenantAgreement';
-import { requestFunction } from '../lib/functionClient';
 import sidebarImage from 'figma:asset/3aa72baccaf75211fcb9945b355cc6f8037b7f16.png';
 import { toast } from 'sonner';
 
@@ -47,66 +46,39 @@ export function TenantDashboard() {
   const getScopedFlag = (scopedKey: string) => localStorage.getItem(scopedKey);
 
   useEffect(() => {
-    const determineOnboardingState = async () => {
-      const accessToken = localStorage.getItem('accessToken');
+    const hasAcceptedLease = getScopedFlag(leaseAcceptedKey);
+    const hasAcceptedTenantAgreement = getScopedFlag(tenantAgreementAcceptedKey);
+    const hasCompletedInitialRentPayment = getScopedFlag(initialRentPaymentKey);
 
-      try {
-        const response = await requestFunction('/tenants/me/assignment', {
-          headers: {
-            ...(accessToken ? { 'x-user-token': accessToken } : {}),
-          },
-        });
-
-        const result = await response.json().catch(() => ({}));
-        const hasRentAssignment = Boolean(response.ok && result?.data?.assigned);
-
-        if (!hasRentAssignment) {
-          setShowLeaseAgreement(false);
-          setShowTenantAgreement(false);
-          setRequireInitialRentPayment(false);
-          setAutoOpenInitialPayment(false);
-          return;
-        }
-      } catch {
-        // If assignment check fails, continue with local gating fallback.
-      }
-
-      const hasAcceptedLease = getScopedFlag(leaseAcceptedKey);
-      const hasAcceptedTenantAgreement = getScopedFlag(tenantAgreementAcceptedKey);
-      const hasCompletedInitialRentPayment = getScopedFlag(initialRentPaymentKey);
-
-      if (!hasAcceptedLease) {
-        setShowLeaseAgreement(true);
-        setShowTenantAgreement(false);
-        setRequireInitialRentPayment(false);
-        setAutoOpenInitialPayment(false);
-        return;
-      }
-
-      if (!hasAcceptedTenantAgreement) {
-        setShowLeaseAgreement(false);
-        setShowTenantAgreement(true);
-        setRequireInitialRentPayment(false);
-        setAutoOpenInitialPayment(false);
-        return;
-      }
-
-      if (!hasCompletedInitialRentPayment) {
-        setShowLeaseAgreement(false);
-        setShowTenantAgreement(false);
-        setRequireInitialRentPayment(true);
-        setCurrentView('rent');
-        setAutoOpenInitialPayment(true);
-        return;
-      }
-
-      setShowLeaseAgreement(false);
+    if (!hasAcceptedLease) {
+      setShowLeaseAgreement(true);
       setShowTenantAgreement(false);
       setRequireInitialRentPayment(false);
       setAutoOpenInitialPayment(false);
-    };
+      return;
+    }
 
-    determineOnboardingState();
+    if (!hasAcceptedTenantAgreement) {
+      setShowLeaseAgreement(false);
+      setShowTenantAgreement(true);
+      setRequireInitialRentPayment(false);
+      setAutoOpenInitialPayment(false);
+      return;
+    }
+
+    if (!hasCompletedInitialRentPayment) {
+      setShowLeaseAgreement(false);
+      setShowTenantAgreement(false);
+      setRequireInitialRentPayment(true);
+      setCurrentView('rent');
+      setAutoOpenInitialPayment(true);
+      return;
+    }
+
+    setShowLeaseAgreement(false);
+    setShowTenantAgreement(false);
+    setRequireInitialRentPayment(false);
+    setAutoOpenInitialPayment(false);
   }, [leaseAcceptedKey, tenantAgreementAcceptedKey, initialRentPaymentKey]);
 
   const handleLogout = () => {

@@ -121,7 +121,7 @@ export function NotificationCenter({ userType, onNotificationClick }: Notificati
                 timestamp: bill.dueDate ? new Date(bill.dueDate) : new Date(),
                 read: false,
                 priority: 'medium' as const,
-                navigateTo: 'utility-bills',
+                navigateTo: 'bills',
               }));
               allNotifications.push(...billNotifs);
             }
@@ -131,7 +131,7 @@ export function NotificationCenter({ userType, onNotificationClick }: Notificati
 
           // Load pending payment reminders (if tenant has outstanding rent)
           try {
-            const assignmentResponse = await requestFunction('/tenants/assignment', {
+            const assignmentResponse = await requestFunction('/tenants/me/assignment', {
               headers: buildHeaders(),
             });
             const assignmentResult = await assignmentResponse.json().catch(() => ({}));
@@ -152,13 +152,42 @@ export function NotificationCenter({ userType, onNotificationClick }: Notificati
                     timestamp: now,
                     read: false,
                     priority: daysUntilDue <= 3 ? 'high' : 'medium',
-                    navigateTo: 'pay-rent',
+                    navigateTo: 'rent',
                   });
                 }
               }
             }
           } catch {
             // Assignment endpoint may not exist, continue
+          }
+
+          // Load request status updates from tenant local data
+          try {
+            const storedRequests = localStorage.getItem('tenantRequests');
+            const parsedRequests = storedRequests ? JSON.parse(storedRequests) : [];
+
+            if (Array.isArray(parsedRequests)) {
+              const statusUpdates = parsedRequests
+                .filter((request: any) => request?.status === 'in-progress' || request?.status === 'resolved')
+                .slice(0, 5)
+                .map((request: any) => ({
+                  id: `request-${request.id}`,
+                  type: 'maintenance' as const,
+                  title:
+                    request.status === 'resolved'
+                      ? 'Request Resolved'
+                      : 'Request Being Worked On',
+                  message: request.title || request.message || 'Your request status was updated.',
+                  timestamp: request.date ? new Date(request.date) : new Date(),
+                  read: false,
+                  priority: request.status === 'resolved' ? ('low' as const) : ('medium' as const),
+                  navigateTo: 'requests',
+                }));
+
+              allNotifications.push(...statusUpdates);
+            }
+          } catch {
+            // Stored request data may be unavailable, continue
           }
 
           setNotifications(allNotifications);

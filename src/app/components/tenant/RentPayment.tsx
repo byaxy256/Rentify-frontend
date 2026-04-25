@@ -99,7 +99,7 @@ export function RentPayment({ autoOpenInitialPayment = false, onInitialPaymentCo
         body: JSON.stringify({
           method: paymentMethod,
           phoneNumber: paymentMethod === 'bank' ? null : phoneNumber,
-          monthsCovered: paymentPurpose === 'rent' ? rentMonths : undefined,
+          monthsCovered: paymentPurpose === 'rent' ? (isFirstRentPayment ? 3 : rentMonths) : undefined,
         }),
       });
 
@@ -220,22 +220,31 @@ export function RentPayment({ autoOpenInitialPayment = false, onInitialPaymentCo
               </div>
               {paymentPurpose === 'rent' && (
                 <>
-                  <div>
-                    <label className="text-sm text-gray-700 mb-2 block">Pay for how many months?</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {[1, 2, 3].map((months) => (
-                        <button
-                          key={months}
-                          onClick={() => setRentMonths(months as 1 | 2 | 3)}
-                          className={`p-3 border rounded-lg text-center transition-colors ${
-                            rentMonths === months ? 'border-[#1e3a3f] bg-[#e8f4f5]' : 'border-gray-200'
-                          }`}
-                        >
-                          <p className="text-sm">{months} {months === 1 ? 'Month' : 'Months'}</p>
-                        </button>
-                      ))}
+                  {isFirstRentPayment ? (
+                    <div>
+                      <label className="text-sm text-gray-700 mb-2 block">First payment requirement</label>
+                      <div className="p-3 border rounded-lg bg-[#e8f4f5] border-[#1e3a3f] text-sm">
+                        First-time tenants must pay exactly 3 months before accessing all features.
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div>
+                      <label className="text-sm text-gray-700 mb-2 block">Pay for how many months?</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[1, 2, 3].map((months) => (
+                          <button
+                            key={months}
+                            onClick={() => setRentMonths(months as 1 | 2 | 3)}
+                            className={`p-3 border rounded-lg text-center transition-colors ${
+                              rentMonths === months ? 'border-[#1e3a3f] bg-[#e8f4f5]' : 'border-gray-200'
+                            }`}
+                          >
+                            <p className="text-sm">{months} {months === 1 ? 'Month' : 'Months'}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between mt-2">
                     <span className="text-gray-600">Due Date</span>
                     <span>{nextDueDate ? new Date(nextDueDate).toLocaleDateString() : 'Not set'}</span>

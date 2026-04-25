@@ -195,7 +195,11 @@ export async function handlePayRent(request: Request) {
     }
 
     const firstPayment = (completedRentCount || 0) === 0;
-    const monthsCovered = Number.isFinite(requestedMonths) && requestedMonths > 0 ? Math.min(Math.max(requestedMonths, 1), 12) : (firstPayment ? 3 : 1);
+    const monthsCovered = firstPayment
+      ? 3
+      : Number.isFinite(requestedMonths) && requestedMonths > 0
+        ? Math.min(Math.max(requestedMonths, 1), 12)
+        : 1;
     const amount = assignment.rent * monthsCovered;
 
     const { data: payment, error: paymentError } = await supabase

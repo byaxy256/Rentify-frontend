@@ -130,13 +130,17 @@ export function AuthPage() {
         user.role === 'admin' || user.email === 'admin@rentify.com'
           ? 'admin'
           : user.role;
+      const resolvedUserId =
+        typeof user?.id === 'string' && user.id.trim() && user.id !== 'undefined' && user.id !== 'null'
+          ? user.id
+          : user.email;
 
       if (requiresPasswordChange) {
         localStorage.setItem('userEmail', user.email);
         localStorage.setItem('userRole', effectiveRole);
         localStorage.setItem('userName', user.full_name || user.name);
         localStorage.setItem('accessToken', session.access_token);
-        localStorage.setItem('userId', user.id);
+        localStorage.setItem('userId', resolvedUserId);
         localStorage.setItem('requiresPasswordChange', 'true');
 
         setPendingUser({
@@ -158,7 +162,7 @@ export function AuthPage() {
       localStorage.setItem('userRole', effectiveRole);
       localStorage.setItem('userName', user.full_name || user.name);
       localStorage.setItem('accessToken', session.access_token);
-      localStorage.setItem('userId', user.id);
+      localStorage.setItem('userId', resolvedUserId);
       localStorage.setItem('requiresPasswordChange', 'false');
 
       // Redirect based on role

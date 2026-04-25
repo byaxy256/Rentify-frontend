@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
-import { CreditCard, Home, Calendar } from 'lucide-react';
+import { CreditCard, Home, Calendar, ChevronUp, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { requestFunction } from '../../lib/functionClient';
 
@@ -16,13 +16,20 @@ export function RentPayment({ autoOpenInitialPayment = false, onInitialPaymentCo
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [paymentPurpose, setPaymentPurpose] = useState<'rent' | 'security'>('rent');
   const [paymentMethod, setPaymentMethod] = useState<'mtn' | 'airtel' | 'bank'>('mtn');
-  const [rentMonths, setRentMonths] = useState<1 | 2 | 3>(3);
+  const [rentMonths, setRentMonths] = useState<number>(3);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [hasAutoOpened, setHasAutoOpened] = useState(false);
 
   const [assignment, setAssignment] = useState<any>(null);
   const [payments, setPayments] = useState<any[]>([]);
+  const minRentMonths = 1;
+  const maxRentMonths = 12;
+
+  const updateRentMonths = (nextValue: number) => {
+    const safeValue = Number.isFinite(nextValue) ? Math.round(nextValue) : minRentMonths;
+    setRentMonths(Math.min(maxRentMonths, Math.max(minRentMonths, safeValue)));
+  };
 
   const loadPaymentData = async () => {
     try {
@@ -239,16 +246,33 @@ export function RentPayment({ autoOpenInitialPayment = false, onInitialPaymentCo
                   ) : (
                     <div>
                       <label className="text-sm text-gray-700 mb-2 block">Pay for how many months?</label>
-                      <select
-                        aria-label="Select rent months"
-                        value={rentMonths}
-                        onChange={(event) => setRentMonths(Number(event.target.value) as 1 | 2 | 3)}
-                        className="w-full p-3 border rounded-lg"
-                      >
-                        <option value={1}>1 month</option>
-                        <option value={2}>2 months</option>
-                        <option value={3}>3 months</option>
-                      </select>
+                      <div className="flex items-center justify-between p-3 border rounded-lg">
+                        <div>
+                          <p className="text-sm text-gray-600">Months to pay</p>
+                          <p className="text-xl">{rentMonths} {rentMonths === 1 ? 'month' : 'months'}</p>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <button
+                            type="button"
+                            aria-label="Increase months"
+                            onClick={() => updateRentMonths(rentMonths + 1)}
+                            disabled={rentMonths >= maxRentMonths}
+                            className="p-1 border rounded disabled:opacity-50"
+                          >
+                            <ChevronUp className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label="Decrease months"
+                            onClick={() => updateRentMonths(rentMonths - 1)}
+                            disabled={rentMonths <= minRentMonths}
+                            className="p-1 border rounded disabled:opacity-50"
+                          >
+                            <ChevronDown className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">Use arrows to choose from 1 to 12 months.</p>
                     </div>
                   )}
                   <div className="flex items-center justify-between mt-2">

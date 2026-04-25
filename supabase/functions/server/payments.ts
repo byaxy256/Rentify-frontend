@@ -27,25 +27,43 @@ function calculateMonthlyDueDate(baseDateInput?: string | null): string | null {
   return due.toISOString().split('T')[0];
 }
 
-function calculateNextRentDueDate(baseDateInput?: string | null, completedRentPayments = 0): string | null {
+function calculateCoveredMonthsFromPayments(payments: Array<{ amount?: number | string }>, rentAmount: number): number {
+  if (!Number.isFinite(rentAmount) || rentAmount <= 0) {
+    return 0;
+  }
+
+  return payments.reduce((total, payment) => {
+    const paymentAmount = Number(payment?.amount || 0);
+    if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+      return total;
+    }
+
+    const months = Math.max(1, Math.round(paymentAmount / rentAmount));
+    return total + months;
+  }, 0);
+}
+
+function calculateNextRentDueDate(baseDateInput?: string | null, coveredMonths = 0): string | null {
   if (!baseDateInput) return null;
 
   const baseDate = new Date(baseDateInput);
   if (Number.isNaN(baseDate.getTime())) return null;
 
-  if (completedRentPayments <= 0) {
+  if (coveredMonths <= 0) {
     return baseDate.toISOString().split('T')[0];
   }
 
   const dueDate = new Date(baseDate);
-  const monthsCovered = completedRentPayments + 2;
-  dueDate.setMonth(dueDate.getMonth() + monthsCovered);
+  dueDate.setMonth(dueDate.getMonth() + coveredMonths);
   return dueDate.toISOString().split('T')[0];
 }
 
 function paymentDisplayType(payment: any): string {
   if (typeof payment?.receipt_number === 'string' && payment.receipt_number.startsWith('SEC-')) {
     return 'security_deposit';
+  }
+  if (typeof payment?.receipt_number === 'string' && payment.receipt_number.startsWith('YAKA-')) {
+    return 'electricity_token';
   }
   return payment?.type || 'bill';
 }
@@ -75,9 +93,9 @@ async function getTenantAssignmentContext(supabase: ReturnType<typeof createServ
     throw new Error(detailsError.message);
   }
 
-  const { count: completedRentPayments, error: paymentCountError } = await supabase
+  const { data: completedRentPayments, error: paymentCountError } = await supabase
     .from('payments')
-    .select('id', { count: 'exact', head: true })
+    .select('amount')
     .eq('tenant_id', tenantId)
     .eq('type', 'rent')
     .eq('status', 'completed');
@@ -85,6 +103,8 @@ async function getTenantAssignmentContext(supabase: ReturnType<typeof createServ
   if (paymentCountError) {
     throw new Error(paymentCountError.message);
   }
+
+  const completedRentMonths = calculateCoveredMonthsFromPayments(completedRentPayments || [], Number(unit.rent || 0));
 
   const baseDate = details?.assigned_date || details?.lease_start_date || null;
 
@@ -98,7 +118,7 @@ async function getTenantAssignmentContext(supabase: ReturnType<typeof createServ
     assignedDate: details?.assigned_date || null,
     leaseStartDate: details?.lease_start_date || null,
     leaseEndDate: details?.lease_end_date || null,
-    nextDueDate: calculateNextRentDueDate(baseDate, completedRentPayments || 0),
+    nextDueDate: calculateNextRentDueDate(baseDate, completedRentMonths),
   };
 }
 
@@ -183,9 +203,9 @@ export async function handlePayRent(request: Request) {
       return badRequestResponse('Tenant rent assignment not found');
     }
 
-    const { count: completedRentCount, error: rentCountError } = await supabase
+    const { data: completedRentPayments, error: rentCountError } = await supabase
       .from('payments')
-      .select('id', { count: 'exact', head: true })
+      .select('amount')
       .eq('tenant_id', user.id)
       .eq('type', 'rent')
       .eq('status', 'completed');
@@ -194,7 +214,8 @@ export async function handlePayRent(request: Request) {
       return errorResponse('Query Failed', rentCountError.message, 500);
     }
 
-    const firstPayment = (completedRentCount || 0) === 0;
+    const firstPayment = (completedRentPayments || []).length === 0;
+    const completedRentMonths = calculateCoveredMonthsFromPayments(completedRentPayments || [], assignment.rent);
     const monthsCovered = firstPayment
       ? 3
       : Number.isFinite(requestedMonths) && requestedMonths > 0
@@ -224,7 +245,7 @@ export async function handlePayRent(request: Request) {
 
     const nextDueDate = calculateNextRentDueDate(
       assignment.assignedDate || assignment.leaseStartDate || null,
-      (completedRentCount || 0) + 1,
+      completedRentMonths + monthsCovered,
     );
 
     return successResponse({
@@ -242,6 +263,92 @@ export async function handlePayRent(request: Request) {
   } catch (error) {
     console.error('Pay rent error:', error);
     return errorResponse('Failed', 'An error occurred while processing rent payment', 500);
+  }
+}
+
+function generateElectricityToken(): string {
+  let token = '';
+  for (let i = 0; i < 20; i++) {
+    token += Math.floor(Math.random() * 10).toString();
+  }
+  return token;
+}
+
+export async function handlePurchaseElectricityToken(request: Request) {
+  try {
+    const user = await getAuthUser(request);
+    if (!user) {
+      return unauthorizedResponse();
+    }
+
+    const isTenant = await hasRole(user.id, ['tenant']);
+    if (!isTenant) {
+      return forbiddenResponse('Only tenants can buy electricity tokens');
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const amount = Number(body?.amount || 0);
+    const meterNumber = String(body?.meterNumber || '').trim();
+    const phoneNumber = String(body?.phoneNumber || '').trim();
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return badRequestResponse('Enter a valid amount');
+    }
+
+    if (!meterNumber) {
+      return badRequestResponse('Meter number is required');
+    }
+
+    if (!phoneNumber) {
+      return badRequestResponse('Phone number is required');
+    }
+
+    const supabase = createServiceClient();
+    const assignment = await getTenantAssignmentContext(supabase, user.id);
+
+    if (!assignment) {
+      return badRequestResponse('Tenant rent assignment not found');
+    }
+
+    const tokenNumber = generateElectricityToken();
+    const receiptNumber = `YAKA-${tokenNumber}`;
+
+    const { data: payment, error: paymentError } = await supabase
+      .from('payments')
+      .insert({
+        tenant_id: user.id,
+        unit_id: assignment.unitId,
+        building_id: assignment.buildingId,
+        amount,
+        method: 'MTN',
+        status: 'completed',
+        type: 'bill',
+        phone_number: phoneNumber,
+        receipt_number: receiptNumber,
+      })
+      .select('id, amount, method, status, type, date, receipt_number')
+      .single();
+
+    if (paymentError) {
+      return errorResponse('Purchase Failed', paymentError.message, 500);
+    }
+
+    return successResponse({
+      id: payment.id,
+      amount: Number(payment.amount || 0),
+      method: payment.method,
+      status: payment.status,
+      type: 'electricity_token',
+      displayType: 'electricity_token',
+      date: payment.date,
+      receiptNumber: payment.receipt_number,
+      tokenNumber,
+      meterNumber,
+      phoneNumber,
+    }, 'Electricity token purchased successfully');
+  } catch (error) {
+    console.error('Purchase electricity token error:', error);
+    return errorResponse('Failed', 'An error occurred while purchasing electricity token', 500);
   }
 }
 

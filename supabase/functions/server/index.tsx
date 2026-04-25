@@ -53,6 +53,7 @@ import {
   handlePayRent,
   handlePayBill,
   handlePaySecurityDeposit,
+  handlePurchaseElectricityToken,
   handleCreatePaymentPlanRequest,
   handleGetPaymentPlanRequests,
 } from "./payments.ts";
@@ -265,6 +266,11 @@ registerPost('/payments/bills/:id/pay', async (c) => {
 
 registerPost('/payments/security-deposit', async (c) => {
   const response = await handlePaySecurityDeposit(c.req.raw);
+  return response;
+});
+
+registerPost('/payments/electricity', async (c) => {
+  const response = await handlePurchaseElectricityToken(c.req.raw);
   return response;
 });
 

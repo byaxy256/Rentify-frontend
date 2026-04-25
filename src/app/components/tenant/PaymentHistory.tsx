@@ -6,17 +6,19 @@ import { requestFunction } from '../../lib/functionClient';
 
 interface Payment {
   id: string;
-  type: 'rent' | 'electricity' | 'water' | 'rubbish' | 'bill' | 'wifi' | 'security_deposit';
+  type: 'rent' | 'electricity' | 'electricity_token' | 'water' | 'rubbish' | 'bill' | 'wifi' | 'security_deposit';
   amount: number;
   date: string;
   method: string;
   status: 'paid';
   displayType?: string;
+  receiptNumber?: string;
 }
 
 const paymentLabels = {
   rent: 'Rent Payment',
   electricity: 'Electricity Bill',
+  electricity_token: 'Yaka Token',
   water: 'Water Bill',
   rubbish: 'Rubbish Collection',
   bill: 'Utility Bill',
@@ -51,6 +53,7 @@ export function PaymentHistory() {
             method: payment.method,
             status: 'paid',
             displayType: payment.displayType,
+            receiptNumber: payment.receiptNumber,
           }))
         : [];
 
@@ -74,12 +77,12 @@ export function PaymentHistory() {
 RENTIFY - PAYMENT RECEIPT
 ========================
 
-Receipt ID: REC-${paymentId.padStart(6, '0')}
+Receipt ID: ${payment.receiptNumber || `REC-${paymentId.padStart(6, '0')}`}
 Date: ${new Date(payment.date).toLocaleDateString()}
 
 Payment Details:
 ----------------
-Type: ${paymentLabels[payment.type]}
+Type: ${paymentLabels[payment.type] || 'Utility Payment'}
 Amount: UGX ${payment.amount.toLocaleString()}
 Payment Method: ${payment.method}
 Status: ${payment.status.toUpperCase()}

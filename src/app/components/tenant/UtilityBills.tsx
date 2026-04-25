@@ -46,9 +46,15 @@ const billColors = {
 
 export function UtilityBills({ onNavigateToWiFi }: UtilityBillsProps) {
   const [bills, setBills] = useState<Bill[]>(initialBills);
+  const [paymentRecords, setPaymentRecords] = useState<any[]>([]);
   const [assignment, setAssignment] = useState<any>(null);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
+  const [showElectricityDialog, setShowElectricityDialog] = useState(false);
+  const [electricityAmount, setElectricityAmount] = useState('');
+  const [electricityMeterNumber, setElectricityMeterNumber] = useState('');
+  const [electricityPhoneNumber, setElectricityPhoneNumber] = useState('');
+  const [latestElectricityToken, setLatestElectricityToken] = useState<{ tokenNumber: string; meterNumber: string; phoneNumber: string; amount: number } | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'mtn' | 'airtel' | 'bank'>('mtn');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -62,13 +68,15 @@ export function UtilityBills({ onNavigateToWiFi }: UtilityBillsProps) {
 
   const loadData = async () => {
     try {
-      const [billsResponse, assignmentResponse] = await Promise.all([
+      const [billsResponse, assignmentResponse, paymentsResponse] = await Promise.all([
         requestFunction('/bills', { headers: buildHeaders() }),
         requestFunction('/tenants/me/assignment', { headers: buildHeaders() }),
+        requestFunction('/payments/me', { headers: buildHeaders() }),
       ]);
 
       const billsResult = await billsResponse.json().catch(() => ({}));
       const assignmentResult = await assignmentResponse.json().catch(() => ({}));
+      const paymentsResult = await paymentsResponse.json().catch(() => ({}));
 
       if (billsResponse.ok) {
         const mapped: Bill[] = Array.isArray(billsResult.data)
@@ -89,6 +97,25 @@ export function UtilityBills({ onNavigateToWiFi }: UtilityBillsProps) {
       if (assignmentResponse.ok) {
         setAssignment(assignmentResult.data || null);
       }
+
+      if (paymentsResponse.ok) {
+        const paymentsData = Array.isArray(paymentsResult?.data?.payments) ? paymentsResult.data.payments : [];
+        setPaymentRecords(paymentsData);
+
+        const latestToken = paymentsData.find((payment: any) =>
+          payment.displayType === 'electricity_token' || String(payment.receiptNumber || '').startsWith('YAKA-'),
+        );
+
+        if (latestToken) {
+          const rawToken = String(latestToken.receiptNumber || '').replace(/^YAKA-/, '');
+          setLatestElectricityToken({
+            tokenNumber: rawToken,
+            meterNumber: '',
+            phoneNumber: '',
+            amount: Number(latestToken.amount || 0),
+          });
+        }
+      }
     } catch (error) {
       console.error('Load utility data error:', error);
       toast.error('Failed to load utility bills');
@@ -107,6 +134,48 @@ export function UtilityBills({ onNavigateToWiFi }: UtilityBillsProps) {
     setSelectedBill(bill);
     setShowPaymentDialog(true);
     setPhoneNumber('');
+  };
+
+  const buyElectricityToken = async () => {
+    try {
+      setIsLoading(true);
+
+      const amount = Number(electricityAmount);
+      const response = await requestFunction('/payments/electricity', {
+        method: 'POST',
+        headers: buildHeaders(),
+        body: JSON.stringify({
+          amount,
+          meterNumber: electricityMeterNumber,
+          phoneNumber: electricityPhoneNumber,
+        }),
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        toast.error(result?.message || 'Electricity token purchase failed');
+        return;
+      }
+
+      const tokenNumber = String(result?.data?.tokenNumber || result?.data?.receiptNumber || '').replace(/^YAKA-/, '');
+      setLatestElectricityToken({
+        tokenNumber,
+        meterNumber: electricityMeterNumber,
+        phoneNumber: electricityPhoneNumber,
+        amount,
+      });
+      toast.success(`Token generated: ${tokenNumber}`);
+      setShowElectricityDialog(false);
+      setElectricityAmount('');
+      setElectricityMeterNumber('');
+      setElectricityPhoneNumber('');
+      await loadData();
+    } catch (error) {
+      console.error('Electricity token purchase error:', error);
+      toast.error('Electricity token purchase failed');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const processPayment = async () => {
@@ -229,20 +298,17 @@ export function UtilityBills({ onNavigateToWiFi }: UtilityBillsProps) {
               <Zap className="w-6 h-6 text-yellow-600" />
             </div>
             <h4 className="mb-2">Electricity (UMEME)</h4>
-            {electricityBill ? (
-              <>
-                <p className="text-sm text-gray-600 mb-4">
-                  Outstanding: UGX {electricityBill.amount.toLocaleString()}
-                </p>
-                <Button
-                  className="w-full bg-black text-white hover:bg-gray-800"
-                  onClick={() => handlePayBill(electricityBill)}
-                >
-                  Pay Now
-                </Button>
-              </>
-            ) : (
-              <p className="text-sm text-gray-600">No Outstanding Bills</p>
+            <p className="text-sm text-gray-600 mb-4">Buy Yaka token using your meter number and phone number</p>
+            <Button
+              className="w-full bg-black text-white hover:bg-gray-800"
+              onClick={() => setShowElectricityDialog(true)}
+            >
+              Buy Yaka Token
+            </Button>
+            {electricityBill && (
+              <p className="text-xs text-gray-500 mt-3">
+                Outstanding bill: UGX {electricityBill.amount.toLocaleString()}
+              </p>
             )}
           </div>
 
@@ -311,6 +377,61 @@ export function UtilityBills({ onNavigateToWiFi }: UtilityBillsProps) {
         </div>
       </div>
 
+      <Dialog open={showElectricityDialog} onOpenChange={setShowElectricityDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Buy Yaka Electricity Token</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm text-gray-700 mb-2 block">Amount to Buy</label>
+              <Input
+                type="number"
+                min="1"
+                value={electricityAmount}
+                onChange={(event) => setElectricityAmount(event.target.value)}
+                placeholder="e.g. 50000"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-gray-700 mb-2 block">Meter Number</label>
+              <Input
+                type="text"
+                value={electricityMeterNumber}
+                onChange={(event) => setElectricityMeterNumber(event.target.value)}
+                placeholder="Meter number"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-gray-700 mb-2 block">Phone Number</label>
+              <Input
+                type="tel"
+                value={electricityPhoneNumber}
+                onChange={(event) => setElectricityPhoneNumber(event.target.value)}
+                placeholder="0700000000"
+              />
+            </div>
+            <Button
+              className="w-full"
+              onClick={buyElectricityToken}
+              disabled={isLoading || !electricityAmount || !electricityMeterNumber || !electricityPhoneNumber}
+            >
+              {isLoading ? 'Buying token...' : 'Buy Token'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {latestElectricityToken && (
+        <div className="bg-[#e8f4f5] border border-[#1e3a3f] rounded-xl p-5">
+          <h3 className="text-lg mb-2">Latest Electricity Token</h3>
+          <p className="text-sm text-gray-700">Token: <span className="font-semibold">{latestElectricityToken.tokenNumber}</span></p>
+          <p className="text-sm text-gray-700">Amount: UGX {latestElectricityToken.amount.toLocaleString()}</p>
+          <p className="text-sm text-gray-700">Meter: {latestElectricityToken.meterNumber || 'Saved on purchase'}</p>
+          <p className="text-sm text-gray-700">Phone: {latestElectricityToken.phoneNumber || 'Saved on purchase'}</p>
+        </div>
+      )}
+
       {/* My Bills Table */}
       <div className="bg-white rounded-xl shadow-sm border">
         <div className="p-6 border-b">
@@ -350,10 +471,10 @@ export function UtilityBills({ onNavigateToWiFi }: UtilityBillsProps) {
                     <td className="p-4 text-sm">
                       <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-gray-400" />
-                        {new Date(bill.dueDate).toLocaleDateString('en-US', { 
-                          year: 'numeric', 
-                          month: '2-digit', 
-                          day: '2-digit' 
+                        {new Date(bill.dueDate).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: '2-digit',
+                          day: '2-digit',
                         }).replace(/\//g, '-')}
                       </div>
                     </td>

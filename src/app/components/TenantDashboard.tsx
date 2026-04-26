@@ -254,6 +254,8 @@ export function TenantDashboard() {
               userName={userName}
               subtitle={`${localStorage.getItem('buildingName') || 'Tenant'} ${localStorage.getItem('unitNumber') ? `· ${localStorage.getItem('unitNumber')}` : ''}`.trim()}
               onLogout={handleLogout}
+              onNavigateToView={(view) => setCurrentView(view as View)}
+              onOpenLeaseViewer={() => setShowLeaseViewer(true)}
             />
           )}
         </div>

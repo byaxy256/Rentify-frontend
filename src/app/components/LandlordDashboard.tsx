@@ -403,6 +403,7 @@ export function LandlordDashboard() {
               userName={userName}
               subtitle={selectedProperty === 'all' ? 'All properties' : properties.find((property) => property.id === selectedProperty)?.name}
               onLogout={handleLogout}
+              onNavigateToView={(view) => setCurrentView(view as View)}
             />
           )}
         </div>

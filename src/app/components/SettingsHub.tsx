@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   AppWindow,
   Bell,
@@ -12,7 +12,11 @@ import {
   Wifi,
 } from 'lucide-react';
 import { Button } from './ui/button';
+import { Input } from './ui/input';
 import { TenantProfile } from './tenant/TenantProfile';
+import { requestFunction } from '../lib/functionClient';
+import { pushNotificationService } from '../lib/pushNotifications';
+import { toast } from 'sonner';
 
 type SettingsSectionId =
   | 'profile'
@@ -39,6 +43,8 @@ interface SettingsHubProps {
   userName: string;
   subtitle?: string;
   onLogout?: () => void;
+  onNavigateToView?: (view: string) => void;
+  onOpenLeaseViewer?: () => void;
 }
 
 const tenantSections: SettingsSection[] = [
@@ -180,11 +186,365 @@ const landlordSections: SettingsSection[] = [
   },
 ];
 
-export function SettingsHub({ role, userName, subtitle, onLogout }: SettingsHubProps) {
+export function SettingsHub({ role, userName, subtitle, onLogout, onNavigateToView, onOpenLeaseViewer }: SettingsHubProps) {
   const sections = useMemo(() => (role === 'tenant' ? tenantSections : landlordSections), [role]);
   const [activeSectionId, setActiveSectionId] = useState<SettingsSectionId>('profile');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [notifyPayments, setNotifyPayments] = useState(true);
+  const [notifyRequests, setNotifyRequests] = useState(true);
+  const [notifyMessages, setNotifyMessages] = useState(true);
+  const [preferredPaymentMethod, setPreferredPaymentMethod] = useState<'mtn' | 'airtel' | 'bank'>('mtn');
+  const [defaultPhoneNumber, setDefaultPhoneNumber] = useState('');
+  const [language, setLanguage] = useState('English');
+  const [theme, setTheme] = useState('System');
+  const [assignmentInfo, setAssignmentInfo] = useState<any>(null);
 
   const activeSection = sections.find((section) => section.id === activeSectionId) || sections[0];
+
+  const settingsStorageKey = `settings:${role}:${(localStorage.getItem('userId') || localStorage.getItem('userEmail') || 'session').toLowerCase()}`;
+
+  useEffect(() => {
+    const stored = localStorage.getItem(settingsStorageKey);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (typeof parsed.notificationsEnabled === 'boolean') setNotificationsEnabled(parsed.notificationsEnabled);
+        if (typeof parsed.notifyPayments === 'boolean') setNotifyPayments(parsed.notifyPayments);
+        if (typeof parsed.notifyRequests === 'boolean') setNotifyRequests(parsed.notifyRequests);
+        if (typeof parsed.notifyMessages === 'boolean') setNotifyMessages(parsed.notifyMessages);
+        if (parsed.preferredPaymentMethod) setPreferredPaymentMethod(parsed.preferredPaymentMethod);
+        if (parsed.defaultPhoneNumber) setDefaultPhoneNumber(parsed.defaultPhoneNumber);
+        if (parsed.language) setLanguage(parsed.language);
+        if (parsed.theme) setTheme(parsed.theme);
+      } catch {
+        // ignore invalid local storage payload
+      }
+    }
+
+    if (pushNotificationService.isSupported()) {
+      setNotificationsEnabled(pushNotificationService.getPermission() === 'granted');
+    }
+  }, [settingsStorageKey]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      settingsStorageKey,
+      JSON.stringify({
+        notificationsEnabled,
+        notifyPayments,
+        notifyRequests,
+        notifyMessages,
+        preferredPaymentMethod,
+        defaultPhoneNumber,
+        language,
+        theme,
+      }),
+    );
+  }, [
+    defaultPhoneNumber,
+    language,
+    notifyMessages,
+    notifyPayments,
+    notifyRequests,
+    notificationsEnabled,
+    preferredPaymentMethod,
+    settingsStorageKey,
+    theme,
+  ]);
+
+  useEffect(() => {
+    if (role !== 'tenant' || activeSectionId !== 'tenancy') {
+      return;
+    }
+
+    const loadAssignment = async () => {
+      try {
+        const accessToken = localStorage.getItem('accessToken');
+        const response = await requestFunction('/tenants/me/assignment', {
+          headers: {
+            ...(accessToken ? { 'x-user-token': accessToken } : {}),
+          },
+        });
+        const result = await response.json().catch(() => ({}));
+        if (response.ok) {
+          setAssignmentInfo(result?.data || null);
+        }
+      } catch {
+        setAssignmentInfo(null);
+      }
+    };
+
+    loadAssignment();
+  }, [activeSectionId, role]);
+
+  const submitPasswordChange = async () => {
+    if (!newPassword || newPassword.length < 8) {
+      toast.error('New password must be at least 8 characters long');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      const accessToken = localStorage.getItem('accessToken');
+      if (!accessToken) {
+        toast.error('Session expired. Please sign in again.');
+        return;
+      }
+
+      const response = await requestFunction('/auth/change-password', {
+        method: 'POST',
+        headers: {
+          'x-user-token': accessToken,
+        },
+        body: JSON.stringify({ newPassword, currentPassword }),
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        toast.error(result?.message || 'Failed to change password');
+        return;
+      }
+
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      toast.success('Password changed successfully');
+    } catch {
+      toast.error('Failed to change password');
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
+  const enableNotifications = async () => {
+    const granted = await pushNotificationService.requestPermission();
+    setNotificationsEnabled(granted);
+  };
+
+  const testNotification = async () => {
+    await pushNotificationService.sendNotification({
+      title: 'Rentify Notifications',
+      body: 'Your notification settings are working correctly.',
+      tag: 'settings-test',
+    });
+  };
+
+  const renderSectionBody = () => {
+    if (role === 'tenant' && activeSection.id === 'profile') {
+      return <TenantProfile />;
+    }
+
+    switch (activeSection.id) {
+      case 'security':
+        return (
+          <div className="space-y-4">
+            <div className="rounded-xl border p-5 space-y-3">
+              <p className="text-lg font-medium">Change Password</p>
+              <Input
+                type="password"
+                placeholder="Current password (optional)"
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+              />
+              <Input
+                type="password"
+                placeholder="New password"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+              />
+              <Input
+                type="password"
+                placeholder="Confirm new password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+              />
+              <Button className="w-full md:w-auto" onClick={submitPasswordChange} disabled={isChangingPassword}>
+                {isChangingPassword ? 'Updating...' : 'Update Password'}
+              </Button>
+            </div>
+          </div>
+        );
+
+      case 'notifications':
+        return (
+          <div className="space-y-4">
+            <div className="rounded-xl border p-5 space-y-3">
+              <p className="text-lg font-medium">Notification Preferences</p>
+              <label className="flex items-center justify-between border rounded-lg p-3">
+                <span>Enable device notifications</span>
+                <Button size="sm" variant={notificationsEnabled ? 'secondary' : 'default'} onClick={enableNotifications}>
+                  {notificationsEnabled ? 'Enabled' : 'Enable'}
+                </Button>
+              </label>
+              <label className="flex items-center justify-between border rounded-lg p-3">
+                <span>Payment notifications</span>
+                <input type="checkbox" checked={notifyPayments} onChange={(event) => setNotifyPayments(event.target.checked)} />
+              </label>
+              <label className="flex items-center justify-between border rounded-lg p-3">
+                <span>Request status notifications</span>
+                <input type="checkbox" checked={notifyRequests} onChange={(event) => setNotifyRequests(event.target.checked)} />
+              </label>
+              <label className="flex items-center justify-between border rounded-lg p-3">
+                <span>Message notifications</span>
+                <input type="checkbox" checked={notifyMessages} onChange={(event) => setNotifyMessages(event.target.checked)} />
+              </label>
+              <Button variant="outline" onClick={testNotification}>Send Test Notification</Button>
+            </div>
+          </div>
+        );
+
+      case 'payment-methods':
+        return (
+          <div className="space-y-4">
+            <div className="rounded-xl border p-5 space-y-3">
+              <p className="text-lg font-medium">Default Payment Settings</p>
+              <div>
+                <label className="text-sm text-gray-600 mb-1 block">Preferred method</label>
+                <select
+                  aria-label="Preferred payment method"
+                  className="w-full p-2 border rounded-lg"
+                  value={preferredPaymentMethod}
+                  onChange={(event) => setPreferredPaymentMethod(event.target.value as 'mtn' | 'airtel' | 'bank')}
+                >
+                  <option value="mtn">MTN Mobile Money</option>
+                  <option value="airtel">Airtel Money</option>
+                  <option value="bank">Bank Transfer</option>
+                </select>
+              </div>
+              <Input
+                type="tel"
+                placeholder="Default phone number"
+                value={defaultPhoneNumber}
+                onChange={(event) => setDefaultPhoneNumber(event.target.value)}
+              />
+              <p className="text-xs text-gray-600">Saved locally and reused to prefill payment screens.</p>
+            </div>
+          </div>
+        );
+
+      case 'wifi':
+        return (
+          <div className="space-y-4">
+            <div className="rounded-xl border p-5 space-y-3">
+              <p className="text-lg font-medium">Wi-Fi Settings</p>
+              {role === 'tenant' ? (
+                <>
+                  <p className="text-sm text-gray-600">Open Wi-Fi plans and manage active subscriptions.</p>
+                  <Button onClick={() => onNavigateToView?.('wifi-billing')}>Open Wi‑Fi Billing</Button>
+                </>
+              ) : (
+                <p className="text-sm text-gray-600">Wi‑Fi settings are managed on tenant accounts.</p>
+              )}
+            </div>
+          </div>
+        );
+
+      case 'documents':
+        return (
+          <div className="space-y-4">
+            <div className="rounded-xl border p-5 space-y-3">
+              <p className="text-lg font-medium">Documents & Agreements</p>
+              {role === 'tenant' ? (
+                <Button onClick={() => onOpenLeaseViewer?.()}>Open Lease Agreement</Button>
+              ) : (
+                <Button onClick={() => onNavigateToView?.('documents')}>Open Documents & Leases</Button>
+              )}
+            </div>
+          </div>
+        );
+
+      case 'tenancy':
+        return (
+          <div className="space-y-4">
+            <div className="rounded-xl border p-5 space-y-2">
+              <p className="text-lg font-medium">Tenancy Information</p>
+              {role === 'tenant' ? (
+                <>
+                  <p className="text-sm text-gray-600">Building: {assignmentInfo?.building || 'Not assigned'}</p>
+                  <p className="text-sm text-gray-600">Unit: {assignmentInfo?.unit || 'Not assigned'}</p>
+                  <p className="text-sm text-gray-600">Lease: {assignmentInfo?.leaseStartDate || '—'} to {assignmentInfo?.leaseEndDate || '—'}</p>
+                </>
+              ) : (
+                <p className="text-sm text-gray-600">Use Buildings and Documents sections to manage tenancy details.</p>
+              )}
+            </div>
+          </div>
+        );
+
+      case 'app-preferences':
+        return (
+          <div className="space-y-4">
+            <div className="rounded-xl border p-5 space-y-3">
+              <p className="text-lg font-medium">App Preferences</p>
+              <div>
+                <label className="text-sm text-gray-600 mb-1 block">Theme</label>
+                <select
+                  aria-label="App theme"
+                  className="w-full p-2 border rounded-lg"
+                  value={theme}
+                  onChange={(event) => setTheme(event.target.value)}
+                >
+                  <option value="System">System</option>
+                  <option value="Light">Light</option>
+                  <option value="Dark">Dark</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-sm text-gray-600 mb-1 block">Language</label>
+                <select
+                  aria-label="App language"
+                  className="w-full p-2 border rounded-lg"
+                  value={language}
+                  onChange={(event) => setLanguage(event.target.value)}
+                >
+                  <option value="English">English</option>
+                  <option value="Luganda">Luganda</option>
+                  <option value="Swahili">Swahili</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'support':
+        return (
+          <div className="space-y-4">
+            <div className="rounded-xl border p-5 space-y-3">
+              <p className="text-lg font-medium">Help & Support</p>
+              <p className="text-sm text-gray-600">Need help? Reach out to the Rentify support team.</p>
+              <Button variant="outline" onClick={() => window.open('mailto:support@rentify.com', '_blank')}>Contact Support</Button>
+            </div>
+          </div>
+        );
+
+      case 'logout':
+        return (
+          <div className="space-y-4">
+            <div className="rounded-xl border p-5">
+              <p className="text-sm text-gray-600 mb-3">Sign out of your account securely.</p>
+              <Button variant="destructive" onClick={onLogout} className="w-full md:w-auto">
+                <LogOut className="w-4 h-4 mr-2" />
+                Logout
+              </Button>
+            </div>
+          </div>
+        );
+
+      default:
+        return (
+          <div className="rounded-xl border p-5 text-sm text-gray-600">This section is available and ready for use.</div>
+        );
+    }
+  };
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -246,33 +606,7 @@ export function SettingsHub({ role, userName, subtitle, onLogout }: SettingsHubP
           <p className="text-sm text-gray-600 mt-1">{activeSection.description}</p>
         </div>
 
-        {role === 'tenant' && activeSection.id === 'profile' ? (
-          <TenantProfile />
-        ) : (
-          <div className="space-y-4">
-            <div className="rounded-xl border p-5">
-              <p className="text-lg font-medium mb-2">{activeSection.title}</p>
-              <p className="text-sm text-gray-600">
-                {activeSection.id === 'logout'
-                  ? 'Use the sidebar logout button below when you want to securely sign out.'
-                  : 'This settings section is now available from one central place. You can expand it with dedicated forms and controls as needed.'}
-              </p>
-            </div>
-
-            {activeSection.id !== 'logout' && (
-              <div className="rounded-xl border border-dashed p-5 text-sm text-gray-600">
-                Tip: all tenant/landlord settings are now grouped here (Profile, Security, Notifications and more), as requested.
-              </div>
-            )}
-
-            {activeSection.id === 'logout' && (
-              <Button variant="destructive" onClick={onLogout} className="w-full md:w-auto">
-                <LogOut className="w-4 h-4 mr-2" />
-                Logout
-              </Button>
-            )}
-          </div>
-        )}
+        {renderSectionBody()}
       </div>
     </div>
   );

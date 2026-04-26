@@ -382,7 +382,7 @@ export function AuthPage() {
             transition={{ delay: 0.5 }}
             className="text-xl text-gray-300"
           >
-            Modern Rent Management System
+            renting but smarter
           </motion.p>
           <motion.div
             initial={{ opacity: 0 }}
@@ -509,7 +509,7 @@ export function AuthPage() {
             transition={{ duration: 0.6 }}
           >
             <h1 className="text-5xl mb-2">Rentify</h1>
-            <p className="text-xl text-gray-300">Modern Rent Management System</p>
+            <p className="text-xl text-gray-300">renting but smarter</p>
           </motion.div>
 
           <AnimatePresence mode="wait">

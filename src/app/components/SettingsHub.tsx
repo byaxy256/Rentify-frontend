@@ -17,6 +17,8 @@ import { TenantProfile } from './tenant/TenantProfile';
 import { requestFunction } from '../lib/functionClient';
 import { pushNotificationService } from '../lib/pushNotifications';
 import { toast } from 'sonner';
+import { jsPDF } from 'jspdf';
+import rentifyLogo from '../../assets/3aa72baccaf75211fcb9945b355cc6f8037b7f16.png';
 
 type SettingsSectionId =
   | 'profile'
@@ -338,6 +340,61 @@ export function SettingsHub({ role, userName, subtitle, onLogout, onNavigateToVi
     });
   };
 
+  const loadLogoDataUrl = async () => {
+    try {
+      const response = await fetch(rentifyLogo);
+      if (!response.ok) {
+        return null;
+      }
+      const blob = await response.blob();
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error('Failed to read logo file'));
+        reader.readAsDataURL(blob);
+      });
+    } catch {
+      return null;
+    }
+  };
+
+  const downloadBrandedPdf = async (filename: string, title: string, lines: string[]) => {
+    const doc = new jsPDF();
+    const logoData = await loadLogoDataUrl();
+
+    if (logoData) {
+      doc.addImage(logoData, 'PNG', 14, 10, 18, 18);
+    }
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.text('Rentify', 36, 18);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(11);
+    doc.text('renting but smarter', 36, 24);
+
+    doc.setDrawColor(30, 58, 63);
+    doc.line(14, 32, 196, 32);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.text(title, 14, 42);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(11);
+    let y = 52;
+    for (const line of lines) {
+      const wrapped = doc.splitTextToSize(line, 180);
+      doc.text(wrapped, 14, y);
+      y += wrapped.length * 6;
+    }
+
+    doc.setFontSize(9);
+    doc.setTextColor(90, 90, 90);
+    doc.text(`Generated on ${new Date().toLocaleString()}`, 14, 285);
+    doc.save(filename);
+  };
+
   const renderSectionBody = () => {
     if (role === 'tenant' && activeSection.id === 'profile') {
       return <TenantProfile />;
@@ -449,27 +506,34 @@ export function SettingsHub({ role, userName, subtitle, onLogout, onNavigateToVi
         );
 
       case 'documents':
-        const downloadTextFile = (filename: string, content: string) => {
-          const blob = new Blob([content], { type: 'text/plain' });
-          const link = document.createElement('a');
-          const url = URL.createObjectURL(blob);
-          link.setAttribute('href', url);
-          link.setAttribute('download', filename);
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
+        const downloadLeaseSummary = async () => {
+          await downloadBrandedPdf(
+            `lease_summary_${new Date().toISOString().slice(0, 10)}.pdf`,
+            'Lease Summary',
+            [
+              `Tenant: ${userName}`,
+              `Building: ${assignmentInfo?.building || 'Not assigned'}`,
+              `Unit: ${assignmentInfo?.unit || 'Not assigned'}`,
+              `Lease Start: ${assignmentInfo?.leaseStartDate || 'Not set'}`,
+              `Lease End: ${assignmentInfo?.leaseEndDate || 'Not set'}`,
+              `Monthly Rent: UGX ${Number(assignmentInfo?.rent || 0).toLocaleString()}`,
+            ],
+          );
+          toast.success('Lease summary PDF downloaded');
         };
 
-        const downloadLeaseSummary = () => {
-          const content = `RENTIFY LEASE SUMMARY\n\nTenant: ${userName}\nBuilding: ${assignmentInfo?.building || 'Not assigned'}\nUnit: ${assignmentInfo?.unit || 'Not assigned'}\nLease Start: ${assignmentInfo?.leaseStartDate || 'Not set'}\nLease End: ${assignmentInfo?.leaseEndDate || 'Not set'}\nMonthly Rent: UGX ${Number(assignmentInfo?.rent || 0).toLocaleString()}\nGenerated: ${new Date().toLocaleString()}\n`;
-          downloadTextFile(`lease_summary_${new Date().toISOString().slice(0, 10)}.txt`, content);
-          toast.success('Lease summary downloaded');
-        };
-
-        const downloadPaymentStatement = () => {
-          const content = `RENTIFY PAYMENT STATEMENT\n\nTenant: ${userName}\nBuilding: ${assignmentInfo?.building || 'Not assigned'}\nUnit: ${assignmentInfo?.unit || 'Not assigned'}\n\nOpen Payment History in the app for full transaction list.\nGenerated: ${new Date().toLocaleString()}\n`;
-          downloadTextFile(`payment_statement_${new Date().toISOString().slice(0, 10)}.txt`, content);
-          toast.success('Payment statement downloaded');
+        const downloadPaymentStatement = async () => {
+          await downloadBrandedPdf(
+            `payment_statement_${new Date().toISOString().slice(0, 10)}.pdf`,
+            'Payment Statement',
+            [
+              `Tenant: ${userName}`,
+              `Building: ${assignmentInfo?.building || 'Not assigned'}`,
+              `Unit: ${assignmentInfo?.unit || 'Not assigned'}`,
+              'Open Payment History in the app for full transaction details.',
+            ],
+          );
+          toast.success('Payment statement PDF downloaded');
         };
 
         return (
@@ -479,8 +543,8 @@ export function SettingsHub({ role, userName, subtitle, onLogout, onNavigateToVi
               {role === 'tenant' ? (
                 <div className="space-y-2">
                   <Button onClick={() => onOpenLeaseViewer?.()}>View Lease Agreement</Button>
-                  <Button variant="outline" onClick={downloadLeaseSummary}>Download Lease Summary</Button>
-                  <Button variant="outline" onClick={downloadPaymentStatement}>Download Payment Statement</Button>
+                  <Button variant="outline" onClick={() => void downloadLeaseSummary()}>Download Lease Summary</Button>
+                  <Button variant="outline" onClick={() => void downloadPaymentStatement()}>Download Payment Statement</Button>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -488,16 +552,18 @@ export function SettingsHub({ role, userName, subtitle, onLogout, onNavigateToVi
                   <Button
                     variant="outline"
                     onClick={() => {
-                      const content = `RENTIFY DOCUMENTS EXPORT\n\nRole: Landlord\nUser: ${userName}\nGenerated: ${new Date().toLocaleString()}\n\nOpen Documents & Leases in the app for full records.\n`;
-                      const blob = new Blob([content], { type: 'text/plain' });
-                      const link = document.createElement('a');
-                      const url = URL.createObjectURL(blob);
-                      link.setAttribute('href', url);
-                      link.setAttribute('download', `landlord_documents_export_${new Date().toISOString().slice(0, 10)}.txt`);
-                      document.body.appendChild(link);
-                      link.click();
-                      document.body.removeChild(link);
-                      toast.success('Documents export downloaded');
+                      void (async () => {
+                        await downloadBrandedPdf(
+                          `landlord_documents_export_${new Date().toISOString().slice(0, 10)}.pdf`,
+                          'Documents Export',
+                          [
+                            'Role: Landlord',
+                            `User: ${userName}`,
+                            'Open Documents & Leases in the app for full records.',
+                          ],
+                        );
+                        toast.success('Documents export PDF downloaded');
+                      })();
                     }}
                   >
                     Download Documents Export

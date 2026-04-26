@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Building2, CreditCard, MessageSquare, Users, LayoutDashboard, LogOut, Zap, Download, FileText, TrendingDown, Bell, Mail, Menu, X } from 'lucide-react';
+import { Building2, CreditCard, MessageSquare, Users, LayoutDashboard, LogOut, Zap, Download, FileText, TrendingDown, Bell, Mail, Menu, X, Settings } from 'lucide-react';
 import { Button } from './ui/button';
 import { NotificationCenter } from './NotificationCenter';
 import { toast } from 'sonner';
@@ -17,8 +17,9 @@ import { PaymentReminders } from './landlord/PaymentReminders';
 import { DocumentsAndLeases } from './landlord/DocumentsAndLeases';
 import { LandlordMessages } from './landlord/LandlordMessages';
 import { LandlordOnboarding } from './landlord/LandlordOnboarding';
+import { SettingsHub } from './SettingsHub';
 
-type View = 'overview' | 'buildings' | 'tenants' | 'payments' | 'bills' | 'requests' | 'reports' | 'documents' | 'expenses' | 'reminders' | 'messages';
+type View = 'overview' | 'buildings' | 'tenants' | 'payments' | 'bills' | 'requests' | 'reports' | 'documents' | 'expenses' | 'reminders' | 'messages' | 'settings';
 
 export function LandlordDashboard() {
   const [currentView, setCurrentView] = useState<View>('overview');
@@ -225,6 +226,7 @@ export function LandlordDashboard() {
     { id: 'requests' as View, icon: MessageSquare, label: 'Tenant Requests' },
     { id: 'reports' as View, icon: Download, label: 'Reports' },
     { id: 'messages' as View, icon: Mail, label: 'Messages' },
+    { id: 'settings' as View, icon: Settings, label: 'Settings' },
   ];
 
   if (showPasswordChange) {
@@ -395,6 +397,14 @@ export function LandlordDashboard() {
           {currentView === 'requests' && <TenantRequests selectedProperty={selectedProperty} />}
           {currentView === 'reports' && <Reports selectedProperty={selectedProperty} />}
           {currentView === 'messages' && <LandlordMessages selectedProperty={selectedProperty} />}
+          {currentView === 'settings' && (
+            <SettingsHub
+              role="landlord"
+              userName={userName}
+              subtitle={selectedProperty === 'all' ? 'All properties' : properties.find((property) => property.id === selectedProperty)?.name}
+              onLogout={handleLogout}
+            />
+          )}
         </div>
       </div>
 

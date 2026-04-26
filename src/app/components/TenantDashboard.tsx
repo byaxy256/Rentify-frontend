@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { Home, CreditCard, FileText, MessageSquare, Zap, LogOut, Calendar, Mail, Menu, X } from 'lucide-react';
+import { Home, CreditCard, FileText, MessageSquare, Zap, LogOut, Calendar, Mail, Menu, X, Settings } from 'lucide-react';
 import { Button } from './ui/button';
 import { NotificationCenter } from './NotificationCenter';
 import { TenantOverview } from './tenant/TenantOverview';
@@ -12,12 +12,12 @@ import { PaymentPlans } from './tenant/PaymentPlans';
 import { TenantMessages } from './tenant/TenantMessages';
 import { WiFiBilling } from './tenant/WiFiBilling';
 import { LeaseAgreement } from './tenant/LeaseAgreement';
-import { TenantProfile } from './tenant/TenantProfile';
 import { TenantAgreement } from './tenant/TenantAgreement';
+import { SettingsHub } from './SettingsHub';
 import sidebarImage from 'figma:asset/3aa72baccaf75211fcb9945b355cc6f8037b7f16.png';
 import { toast } from 'sonner';
 
-type View = 'overview' | 'rent' | 'bills' | 'history' | 'requests' | 'payment-plans' | 'messages' | 'wifi-billing' | 'profile';
+type View = 'overview' | 'rent' | 'bills' | 'history' | 'requests' | 'payment-plans' | 'messages' | 'wifi-billing' | 'settings';
 
 export function TenantDashboard() {
   const [currentView, setCurrentView] = useState<View>('overview');
@@ -129,7 +129,7 @@ export function TenantDashboard() {
     { id: 'history' as View, icon: FileText, label: 'Payment History' },
     { id: 'requests' as View, icon: MessageSquare, label: 'Requests' },
     { id: 'messages' as View, icon: Mail, label: 'Messages' },
-    { id: 'profile' as View, icon: Home, label: 'Profile' },
+    { id: 'settings' as View, icon: Settings, label: 'Settings' },
   ];
 
   return (
@@ -247,8 +247,15 @@ export function TenantDashboard() {
           {currentView === 'history' && <PaymentHistory />}
           {currentView === 'requests' && <TenantRequestsView />}
           {currentView === 'messages' && <TenantMessages />}
-          {currentView === 'profile' && <TenantProfile />}
           {currentView === 'wifi-billing' && <WiFiBilling onBack={() => setCurrentView('bills')} />}
+          {currentView === 'settings' && (
+            <SettingsHub
+              role="tenant"
+              userName={userName}
+              subtitle={`${localStorage.getItem('buildingName') || 'Tenant'} ${localStorage.getItem('unitNumber') ? `· ${localStorage.getItem('unitNumber')}` : ''}`.trim()}
+              onLogout={handleLogout}
+            />
+          )}
         </div>
       </div>
 

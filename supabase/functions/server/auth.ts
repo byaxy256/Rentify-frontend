@@ -215,6 +215,63 @@ export async function handleSignup(request: Request) {
 
     const supabase = createServiceClient();
 
+    let targetUnitForTenant: {
+      id: string;
+      building_id: string;
+      unit_number: string;
+      rent: number;
+      buildingName: string;
+    } | null = null;
+
+    if (role === 'tenant') {
+      const requestedBuildingName = String(buildingName || '').trim();
+      if (!requestedBuildingName) {
+        return badRequestResponse('Building name is required for tenant signup');
+      }
+
+      const { data: matchingBuildings, error: buildingLookupError } = await supabase
+        .from('buildings')
+        .select('id, name, created_at')
+        .ilike('name', `%${requestedBuildingName}%`)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (buildingLookupError) {
+        return errorResponse('Signup Failed', buildingLookupError.message, 500);
+      }
+
+      if (!matchingBuildings || matchingBuildings.length === 0) {
+        return errorResponse('Building Not Found', 'No building matches that name', 400);
+      }
+
+      for (const building of matchingBuildings) {
+        const { data: availableUnitInBuilding, error: unitLookupError } = await supabase
+          .from('units')
+          .select('id, building_id, unit_number, rent')
+          .eq('building_id', building.id)
+          .eq('is_occupied', false)
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+
+        if (unitLookupError) {
+          continue;
+        }
+
+        if (availableUnitInBuilding) {
+          targetUnitForTenant = {
+            ...availableUnitInBuilding,
+            buildingName: building.name,
+          };
+          break;
+        }
+      }
+
+      if (!targetUnitForTenant) {
+        return errorResponse('No Vacancy', 'No available units were found in that building right now', 409);
+      }
+    }
+
     // Create auth user
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email,
@@ -248,45 +305,7 @@ export async function handleSignup(request: Request) {
         return errorResponse('Signup Failed', tenantDetailsError.message, 500);
       }
 
-      // Auto-assign tenant to first available unit in the specified building
-      let availableUnit = null;
-
-      if (buildingName) {
-        // Find building by name and get first available unit
-        const { data: building, error: buildingError } = await supabase
-          .from('buildings')
-          .select('id')
-          .ilike('name', `%${buildingName}%`)
-          .maybeSingle();
-
-        if (!buildingError && building) {
-          const { data: unit, error: unitError } = await supabase
-            .from('units')
-            .select('id, building_id, unit_number, rent')
-            .eq('building_id', building.id)
-            .eq('is_occupied', false)
-            .limit(1)
-            .single();
-
-          if (!unitError && unit) {
-            availableUnit = unit;
-          }
-        }
-      } else {
-        // If no building specified, get first available unit from any building (fallback)
-        const { data: unit, error: unitError } = await supabase
-          .from('units')
-          .select('id, building_id, unit_number, rent')
-          .eq('is_occupied', false)
-          .limit(1)
-          .single();
-
-        if (!unitError && unit) {
-          availableUnit = unit;
-        }
-      }
-
-      if (availableUnit) {
+      if (targetUnitForTenant) {
         const today = new Date().toISOString().split('T')[0];
         const leaseEndDate = new Date(today);
         leaseEndDate.setMonth(leaseEndDate.getMonth() + 3);
@@ -298,31 +317,38 @@ export async function handleSignup(request: Request) {
             assigned_date: today,
             lease_start_date: today,
             lease_end_date: leaseEndDate.toISOString().split('T')[0],
-            security_deposit: availableUnit.rent || 0,
+            security_deposit: targetUnitForTenant.rent || 0,
           })
           .eq('tenant_id', authData.user.id);
 
         if (!tenantLeaseError) {
           // Assign tenant to unit
-          await supabase
+          const { data: claimedUnit } = await supabase
             .from('units')
             .update({
               tenant_id: authData.user.id,
               is_occupied: true,
             })
-            .eq('id', availableUnit.id);
+            .eq('id', targetUnitForTenant.id)
+            .eq('is_occupied', false)
+            .select('id')
+            .maybeSingle();
+
+          if (!claimedUnit) {
+            return errorResponse('Assignment Failed', 'Selected unit was just taken. Please try signup again.', 409);
+          }
 
           // Update building occupancy count
           const { count: occupiedCount } = await supabase
             .from('units')
             .select('id', { count: 'exact', head: true })
-            .eq('building_id', availableUnit.building_id)
+            .eq('building_id', targetUnitForTenant.building_id)
             .eq('is_occupied', true);
 
           await supabase
             .from('buildings')
             .update({ occupied_units: occupiedCount || 0 })
-            .eq('id', availableUnit.building_id);
+            .eq('id', targetUnitForTenant.building_id);
 
           // Log the auto-assignment
           await logAuditEvent({
@@ -331,15 +357,16 @@ export async function handleSignup(request: Request) {
             actorEmail: 'system@rentify.com',
             action: 'AUTO_ASSIGN_TENANT',
             entityType: 'unit',
-            entityId: availableUnit.id,
-            details: `Auto-assigned tenant ${full_name} to unit ${availableUnit.unit_number}`,
+            entityId: targetUnitForTenant.id,
+            details: `Auto-assigned tenant ${full_name} to unit ${targetUnitForTenant.unit_number}`,
             status: 'success',
             metadata: {
               tenantId: authData.user.id,
-              buildingId: availableUnit.building_id,
-              unitNumber: availableUnit.unit_number,
+              buildingId: targetUnitForTenant.building_id,
+              unitNumber: targetUnitForTenant.unit_number,
               tenantEmail: email,
               buildingNameRequested: buildingName,
+              buildingNameMatched: targetUnitForTenant.buildingName,
             },
           });
         }

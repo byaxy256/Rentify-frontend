@@ -20,15 +20,25 @@ export function TenantProfile() {
     nextOfKinContact: '',
   });
 
+  const rawUserId = (localStorage.getItem('userId') || '').trim();
+  const rawUserEmail = (localStorage.getItem('userEmail') || '').trim().toLowerCase();
+  const invalidIdentityValues = new Set(['', 'undefined', 'null', 'tenant']);
+  const stableIdentity = !invalidIdentityValues.has(rawUserId)
+    ? `id:${rawUserId}`
+    : !invalidIdentityValues.has(rawUserEmail)
+      ? `email:${rawUserEmail}`
+      : 'session';
+  const photoStorageKey = `tenantProfilePhoto:${stableIdentity}`;
+
   const handlePhotoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file || !profile?.id) return;
+    if (!file) return;
 
     const reader = new FileReader();
     reader.onload = () => {
       const result = String(reader.result || '');
       setPhotoUrl(result);
-      localStorage.setItem(`tenantProfilePhoto:${profile.id}`, result);
+      localStorage.setItem(photoStorageKey, result);
     };
     reader.readAsDataURL(file);
   };
@@ -53,9 +63,16 @@ export function TenantProfile() {
             nextOfKin: result.data?.nextOfKin || '',
             nextOfKinContact: result.data?.nextOfKinContact || '',
           });
-          if (result.data?.id) {
-            const storedPhoto = localStorage.getItem(`tenantProfilePhoto:${result.data.id}`) || '';
-            setPhotoUrl(storedPhoto);
+
+          const stablePhoto = localStorage.getItem(photoStorageKey) || '';
+          if (stablePhoto) {
+            setPhotoUrl(stablePhoto);
+          } else if (result.data?.id) {
+            const legacyPhoto = localStorage.getItem(`tenantProfilePhoto:${result.data.id}`) || '';
+            if (legacyPhoto) {
+              setPhotoUrl(legacyPhoto);
+              localStorage.setItem(photoStorageKey, legacyPhoto);
+            }
           }
         }
       } finally {
@@ -64,7 +81,7 @@ export function TenantProfile() {
     };
 
     loadProfile();
-  }, []);
+  }, [photoStorageKey]);
 
   const handleSaveProfile = async () => {
     try {

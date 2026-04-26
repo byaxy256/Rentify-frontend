@@ -4,7 +4,6 @@ import { Download, CheckCircle, CreditCard } from 'lucide-react';
 import { toast } from 'sonner';
 import { requestFunction } from '../../lib/functionClient';
 import { jsPDF } from 'jspdf';
-import rentifyLogo from '../../../assets/3aa72baccaf75211fcb9945b355cc6f8037b7f16.png';
 
 interface Payment {
   id: string;
@@ -31,22 +30,14 @@ const paymentLabels = {
 export function PaymentHistory() {
   const [payments, setPayments] = useState<Payment[]>([]);
 
-  const loadLogoDataUrl = async () => {
-    try {
-      const response = await fetch(rentifyLogo);
-      if (!response.ok) {
-        return null;
-      }
-      const blob = await response.blob();
-      return await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(String(reader.result));
-        reader.onerror = () => reject(new Error('Failed to read logo file'));
-        reader.readAsDataURL(blob);
-      });
-    } catch {
-      return null;
-    }
+  const drawPdfLogo = (doc: jsPDF) => {
+    doc.setFillColor(30, 58, 63);
+    doc.roundedRect(14, 10, 18, 18, 3, 3, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.text('R', 20.8, 21.7);
+    doc.setTextColor(0, 0, 0);
   };
 
   const loadPayments = async () => {
@@ -93,12 +84,9 @@ export function PaymentHistory() {
     if (!payment) return;
 
     const doc = new jsPDF();
-    const logoData = await loadLogoDataUrl();
     const receiptId = payment.receiptNumber || `REC-${paymentId.padStart(6, '0')}`;
 
-    if (logoData) {
-      doc.addImage(logoData, 'PNG', 14, 10, 18, 18);
-    }
+    drawPdfLogo(doc);
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(18);

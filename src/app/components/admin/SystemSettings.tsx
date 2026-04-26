@@ -91,27 +91,29 @@ export function SystemSettings() {
         </div>
         <div className="p-6 space-y-4">
           <div className="flex items-center justify-between">
-            <div>
+            <label className="flex-1 cursor-pointer">
               <p className="font-medium">Email Notifications</p>
               <p className="text-sm text-gray-600">Send notifications via email</p>
-            </div>
+            </label>
             <input
               type="checkbox"
               checked={settings.emailNotifications}
               onChange={(e) => setSettings({ ...settings, emailNotifications: e.target.checked })}
               className="w-5 h-5"
+              aria-label="Email Notifications"
             />
           </div>
           <div className="flex items-center justify-between">
-            <div>
+            <label className="flex-1 cursor-pointer">
               <p className="font-medium">SMS Notifications</p>
               <p className="text-sm text-gray-600">Send notifications via SMS</p>
-            </div>
+            </label>
             <input
               type="checkbox"
               checked={settings.smsNotifications}
               onChange={(e) => setSettings({ ...settings, smsNotifications: e.target.checked })}
               className="w-5 h-5"
+              aria-label="SMS Notifications"
             />
           </div>
         </div>
@@ -125,15 +127,16 @@ export function SystemSettings() {
         </div>
         <div className="p-6 space-y-4">
           <div className="flex items-center justify-between">
-            <div>
+            <label className="flex-1 cursor-pointer">
               <p className="font-medium">Maintenance Mode</p>
               <p className="text-sm text-gray-600">Temporarily disable platform access</p>
-            </div>
+            </label>
             <input
               type="checkbox"
               checked={settings.maintenanceMode}
               onChange={(e) => setSettings({ ...settings, maintenanceMode: e.target.checked })}
               className="w-5 h-5"
+              aria-label="Maintenance Mode"
             />
           </div>
         </div>
@@ -143,19 +146,20 @@ export function SystemSettings() {
       <div className="bg-white rounded-xl shadow-sm border">
         <div className="p-6 border-b flex items-center gap-3">
           <Database className="w-5 h-5 text-blue-500" />
-          <h3 className="text-xl">Database & Backup</h3>
+          <h3 className="text-xl">Database Settings</h3>
         </div>
         <div className="p-6 space-y-4">
           <div className="flex items-center justify-between">
-            <div>
+            <label className="flex-1 cursor-pointer">
               <p className="font-medium">Automatic Backups</p>
               <p className="text-sm text-gray-600">Enable automated database backups</p>
-            </div>
+            </label>
             <input
               type="checkbox"
               checked={settings.autoBackup}
               onChange={(e) => setSettings({ ...settings, autoBackup: e.target.checked })}
               className="w-5 h-5"
+              aria-label="Automatic Backups"
             />
           </div>
           <div>
@@ -164,6 +168,7 @@ export function SystemSettings() {
               value={settings.backupFrequency}
               onChange={(e) => setSettings({ ...settings, backupFrequency: e.target.value })}
               className="w-full p-2 border rounded-lg"
+              aria-label="Backup Frequency"
             >
               <option value="hourly">Hourly</option>
               <option value="daily">Daily</option>

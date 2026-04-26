@@ -264,6 +264,8 @@ export function WiFiBilling({ onBack }: WiFiBillingProps) {
                   <button
                     onClick={() => copyToClipboard(activeSubscription.username || '', 'Username')}
                     className="text-white/60 hover:text-white transition-colors"
+                    title="Copy Username"
+                    aria-label="Copy Username"
                   >
                     <Copy className="w-3 h-3" />
                   </button>
@@ -276,6 +278,8 @@ export function WiFiBilling({ onBack }: WiFiBillingProps) {
                   <button
                     onClick={() => copyToClipboard(activeSubscription.password || '', 'Password')}
                     className="text-white/60 hover:text-white transition-colors"
+                    title="Copy Password"
+                    aria-label="Copy Password"
                   >
                     <Copy className="w-3 h-3" />
                   </button>
@@ -288,6 +292,8 @@ export function WiFiBilling({ onBack }: WiFiBillingProps) {
                   <button
                     onClick={() => copyToClipboard(activeSubscription.voucherCode || '', 'Voucher Code')}
                     className="text-white/60 hover:text-white transition-colors"
+                    title="Copy Voucher Code"
+                    aria-label="Copy Voucher Code"
                   >
                     <Copy className="w-3 h-3" />
                   </button>
@@ -427,17 +433,17 @@ export function WiFiBilling({ onBack }: WiFiBillingProps) {
                     <tr key={payment.id} className="border-b hover:bg-gray-50">
                       <td className="p-4 text-sm">{payment.planName}</td>
                       <td className="p-4 text-sm">UGX {payment.amount.toLocaleString()}</td>
-                      <td className="p-4">
+                      <td className="p-4 text-sm">
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-xs">{payment.voucherCode}</span>
-                          {payment.voucherCode && (
-                            <button
-                              onClick={() => copyToClipboard(payment.voucherCode || '', 'Voucher Code')}
-                              className="text-gray-400 hover:text-gray-600 transition-colors"
-                            >
-                              <Copy className="w-3 h-3" />
-                            </button>
-                          )}
+                          <button
+                            onClick={() => copyToClipboard(payment.voucherCode || '', 'Voucher Code')}
+                            className="text-gray-400 hover:text-gray-600 transition-colors"
+                            title="Copy Voucher Code"
+                            aria-label="Copy Voucher Code"
+                          >
+                            <Copy className="w-3 h-3" />
+                          </button>
                         </div>
                       </td>
                       <td className="p-4 text-sm">{new Date(payment.date).toLocaleDateString()}</td>

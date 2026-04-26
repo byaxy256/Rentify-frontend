@@ -18,7 +18,16 @@ import { requestFunction } from '../lib/functionClient';
 import { pushNotificationService } from '../lib/pushNotifications';
 import { toast } from 'sonner';
 import { jsPDF } from 'jspdf';
-import rentifyLogo from '../../assets/3aa72baccaf75211fcb9945b355cc6f8037b7f16.png';
+import {
+  APP_LANGUAGE_STORAGE_KEY,
+  APP_THEME_STORAGE_KEY,
+  AppLanguage,
+  AppTheme,
+  applyLanguagePreference,
+  applyThemePreference,
+  getStoredLanguagePreference,
+  getStoredThemePreference,
+} from '../lib/preferences';
 
 type SettingsSectionId =
   | 'profile'
@@ -47,6 +56,7 @@ interface SettingsHubProps {
   onLogout?: () => void;
   onNavigateToView?: (view: string) => void;
   onOpenLeaseViewer?: () => void;
+  onOpenTenantAgreementViewer?: () => void;
 }
 
 const tenantSections: SettingsSection[] = [
@@ -188,7 +198,7 @@ const landlordSections: SettingsSection[] = [
   },
 ];
 
-export function SettingsHub({ role, userName, subtitle, onLogout, onNavigateToView, onOpenLeaseViewer }: SettingsHubProps) {
+export function SettingsHub({ role, userName, subtitle, onLogout, onNavigateToView, onOpenLeaseViewer, onOpenTenantAgreementViewer }: SettingsHubProps) {
   const sections = useMemo(() => (role === 'tenant' ? tenantSections : landlordSections), [role]);
   const [activeSectionId, setActiveSectionId] = useState<SettingsSectionId>('profile');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
@@ -201,9 +211,15 @@ export function SettingsHub({ role, userName, subtitle, onLogout, onNavigateToVi
   const [notifyMessages, setNotifyMessages] = useState(true);
   const [preferredPaymentMethod, setPreferredPaymentMethod] = useState<'mtn' | 'airtel' | 'bank'>('mtn');
   const [defaultPhoneNumber, setDefaultPhoneNumber] = useState('');
-  const [language, setLanguage] = useState('English');
-  const [theme, setTheme] = useState('System');
+  const [language, setLanguage] = useState<AppLanguage>('English');
+  const [theme, setTheme] = useState<AppTheme>('System');
   const [assignmentInfo, setAssignmentInfo] = useState<any>(null);
+
+  const languagePreviewText: Record<AppLanguage, string> = {
+    English: 'Language set to English.',
+    Luganda: 'Olulimi lussiddwa ku Luganda.',
+    Swahili: 'Lugha imewekwa kuwa Kiswahili.',
+  };
 
   const activeSection = sections.find((section) => section.id === activeSectionId) || sections[0];
 
@@ -220,11 +236,23 @@ export function SettingsHub({ role, userName, subtitle, onLogout, onNavigateToVi
         if (typeof parsed.notifyMessages === 'boolean') setNotifyMessages(parsed.notifyMessages);
         if (parsed.preferredPaymentMethod) setPreferredPaymentMethod(parsed.preferredPaymentMethod);
         if (parsed.defaultPhoneNumber) setDefaultPhoneNumber(parsed.defaultPhoneNumber);
-        if (parsed.language) setLanguage(parsed.language);
-        if (parsed.theme) setTheme(parsed.theme);
+        if (parsed.language === 'English' || parsed.language === 'Luganda' || parsed.language === 'Swahili') {
+          setLanguage(parsed.language);
+        } else {
+          setLanguage(getStoredLanguagePreference());
+        }
+
+        if (parsed.theme === 'System' || parsed.theme === 'Light' || parsed.theme === 'Dark') {
+          setTheme(parsed.theme);
+        } else {
+          setTheme(getStoredThemePreference());
+        }
       } catch {
         // ignore invalid local storage payload
       }
+    } else {
+      setLanguage(getStoredLanguagePreference());
+      setTheme(getStoredThemePreference());
     }
 
     if (pushNotificationService.isSupported()) {
@@ -257,6 +285,16 @@ export function SettingsHub({ role, userName, subtitle, onLogout, onNavigateToVi
     settingsStorageKey,
     theme,
   ]);
+
+  useEffect(() => {
+    localStorage.setItem(APP_THEME_STORAGE_KEY, theme);
+    localStorage.setItem(APP_LANGUAGE_STORAGE_KEY, language);
+
+    const cleanupThemeListener = applyThemePreference(theme);
+    applyLanguagePreference(language);
+
+    return cleanupThemeListener;
+  }, [language, theme]);
 
   useEffect(() => {
     if (role !== 'tenant' || !['tenancy', 'documents'].includes(activeSectionId)) {
@@ -340,31 +378,19 @@ export function SettingsHub({ role, userName, subtitle, onLogout, onNavigateToVi
     });
   };
 
-  const loadLogoDataUrl = async () => {
-    try {
-      const response = await fetch(rentifyLogo);
-      if (!response.ok) {
-        return null;
-      }
-      const blob = await response.blob();
-      return await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(String(reader.result));
-        reader.onerror = () => reject(new Error('Failed to read logo file'));
-        reader.readAsDataURL(blob);
-      });
-    } catch {
-      return null;
-    }
+  const drawPdfLogo = (doc: jsPDF) => {
+    doc.setFillColor(30, 58, 63);
+    doc.roundedRect(14, 10, 18, 18, 3, 3, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.text('R', 20.8, 21.7);
+    doc.setTextColor(0, 0, 0);
   };
 
   const downloadBrandedPdf = async (filename: string, title: string, lines: string[]) => {
     const doc = new jsPDF();
-    const logoData = await loadLogoDataUrl();
-
-    if (logoData) {
-      doc.addImage(logoData, 'PNG', 14, 10, 18, 18);
-    }
+    drawPdfLogo(doc);
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(18);
@@ -543,6 +569,7 @@ export function SettingsHub({ role, userName, subtitle, onLogout, onNavigateToVi
               {role === 'tenant' ? (
                 <div className="space-y-2">
                   <Button onClick={() => onOpenLeaseViewer?.()}>View Lease Agreement</Button>
+                  <Button variant="outline" onClick={() => onOpenTenantAgreementViewer?.()}>View Tenant Agreement</Button>
                   <Button variant="outline" onClick={() => void downloadLeaseSummary()}>Download Lease Summary</Button>
                   <Button variant="outline" onClick={() => void downloadPaymentStatement()}>Download Payment Statement</Button>
                 </div>
@@ -603,7 +630,7 @@ export function SettingsHub({ role, userName, subtitle, onLogout, onNavigateToVi
                   aria-label="App theme"
                   className="w-full p-2 border rounded-lg"
                   value={theme}
-                  onChange={(event) => setTheme(event.target.value)}
+                  onChange={(event) => setTheme(event.target.value as AppTheme)}
                 >
                   <option value="System">System</option>
                   <option value="Light">Light</option>
@@ -616,13 +643,15 @@ export function SettingsHub({ role, userName, subtitle, onLogout, onNavigateToVi
                   aria-label="App language"
                   className="w-full p-2 border rounded-lg"
                   value={language}
-                  onChange={(event) => setLanguage(event.target.value)}
+                  onChange={(event) => setLanguage(event.target.value as AppLanguage)}
                 >
                   <option value="English">English</option>
                   <option value="Luganda">Luganda</option>
                   <option value="Swahili">Swahili</option>
                 </select>
               </div>
+              <p className="text-xs text-gray-600">{languagePreviewText[language]}</p>
+              <p className="text-xs text-gray-600">Theme and language are now applied immediately and remembered across sessions.</p>
             </div>
           </div>
         );

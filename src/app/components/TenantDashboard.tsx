@@ -35,12 +35,14 @@ export function TenantDashboard() {
   const [showLeaseAgreement, setShowLeaseAgreement] = useState(false);
   const [showLeaseViewer, setShowLeaseViewer] = useState(false);
   const [showTenantAgreement, setShowTenantAgreement] = useState(false);
+  const [showTenantAgreementViewer, setShowTenantAgreementViewer] = useState(false);
   const [requireInitialRentPayment, setRequireInitialRentPayment] = useState(false);
   const [autoOpenInitialPayment, setAutoOpenInitialPayment] = useState(false);
 
   const leaseAcceptedKey = `hasAcceptedLease:${scopedIdentity}`;
   const leaseAcceptedDateKey = `leaseAcceptedDate:${scopedIdentity}`;
   const tenantAgreementAcceptedKey = `hasAcceptedTenantAgreement:${scopedIdentity}`;
+  const tenantAgreementAcceptedDateKey = `tenantAgreementAcceptedDate:${scopedIdentity}`;
   const initialRentPaymentKey = `hasCompletedInitialRentPayment:${scopedIdentity}`;
 
   const getScopedFlag = (scopedKey: string) => localStorage.getItem(scopedKey);
@@ -107,6 +109,7 @@ export function TenantDashboard() {
 
   const handleAcceptTenantAgreement = () => {
     localStorage.setItem(tenantAgreementAcceptedKey, 'true');
+    localStorage.setItem(tenantAgreementAcceptedDateKey, new Date().toISOString());
     setShowTenantAgreement(false);
     setRequireInitialRentPayment(true);
     setCurrentView('rent');
@@ -256,6 +259,7 @@ export function TenantDashboard() {
               onLogout={handleLogout}
               onNavigateToView={(view) => setCurrentView(view as View)}
               onOpenLeaseViewer={() => setShowLeaseViewer(true)}
+              onOpenTenantAgreementViewer={() => setShowTenantAgreementViewer(true)}
             />
           )}
         </div>
@@ -279,6 +283,13 @@ export function TenantDashboard() {
 
       <TenantAgreement
         isOpen={showTenantAgreement}
+        onAccept={handleAcceptTenantAgreement}
+      />
+
+      <TenantAgreement
+        isOpen={showTenantAgreementViewer}
+        onClose={() => setShowTenantAgreementViewer(false)}
+        readOnly={true}
         onAccept={handleAcceptTenantAgreement}
       />
     </div>

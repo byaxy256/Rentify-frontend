@@ -7,10 +7,20 @@ import { requestFunction } from '../../lib/functionClient';
 interface TenantAgreementProps {
   isOpen: boolean;
   onAccept: () => void;
+  onClose?: () => void;
+  readOnly?: boolean;
 }
 
-export function TenantAgreement({ isOpen, onAccept }: TenantAgreementProps) {
+export function TenantAgreement({ isOpen, onAccept, onClose, readOnly = false }: TenantAgreementProps) {
   const [assignment, setAssignment] = useState<any>(null);
+  const rawUserId = (localStorage.getItem('userId') || '').trim();
+  const rawUserEmail = (localStorage.getItem('userEmail') || '').trim().toLowerCase();
+  const invalidIdentityValues = new Set(['', 'undefined', 'null', 'tenant']);
+  const scopedIdentity = !invalidIdentityValues.has(rawUserId)
+    ? `id:${rawUserId}`
+    : !invalidIdentityValues.has(rawUserEmail)
+      ? `email:${rawUserEmail}`
+      : 'session';
 
   useEffect(() => {
     const loadAssignment = async () => {
@@ -40,8 +50,10 @@ export function TenantAgreement({ isOpen, onAccept }: TenantAgreementProps) {
   const threeMonthTotal = monthlyRent * 3;
   const securityDeposit = Number(assignment?.securityDeposit || monthlyRent || 0);
 
+  const acceptedDate = localStorage.getItem(`tenantAgreementAcceptedDate:${scopedIdentity}`);
+
   return (
-    <Dialog open={isOpen}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open && readOnly) onClose?.(); }}>
       <DialogContent className="max-w-5xl max-h-[90vh]">
         <DialogHeader>
           <DialogTitle className="text-3xl">Tenant Agreement</DialogTitle>
@@ -139,10 +151,21 @@ export function TenantAgreement({ isOpen, onAccept }: TenantAgreementProps) {
             </div>
           </div>
 
-          <Button className="w-full text-lg py-6" onClick={onAccept}>
-            <CheckCircle className="w-4 h-4 mr-2" />
-            Accept Tenant Agreement
-          </Button>
+          {readOnly ? (
+            <div className="space-y-3">
+              <p className="text-xs text-gray-500">
+                Accepted on {acceptedDate ? new Date(acceptedDate).toLocaleString() : 'N/A'}
+              </p>
+              <Button className="w-full" variant="outline" onClick={onClose}>
+                Close
+              </Button>
+            </div>
+          ) : (
+            <Button className="w-full text-lg py-6" onClick={onAccept}>
+              <CheckCircle className="w-4 h-4 mr-2" />
+              Accept Tenant Agreement
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>

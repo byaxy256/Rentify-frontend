@@ -20,7 +20,7 @@ export function LeaseAgreement({ isOpen, onAccept, onClose, tenantName, readOnly
   const [hasAccepted, setHasAccepted] = useState(false);
   const [assignment, setAssignment] = useState<any>(null);
   const userId = localStorage.getItem('userId') || localStorage.getItem('userEmail') || 'tenant';
-  const acceptedDate = localStorage.getItem(`leaseAcceptedDate:${userId}`) || localStorage.getItem('leaseAcceptedDate');
+  const acceptedDate = localStorage.getItem(`leaseAcceptedDate:${userId}`);
 
   useEffect(() => {
     const loadAssignment = async () => {

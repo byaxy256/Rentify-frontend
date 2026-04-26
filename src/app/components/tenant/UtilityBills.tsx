@@ -21,6 +21,13 @@ interface Bill {
   paidDate?: string;
 }
 
+interface YakaPurchase {
+  id: string;
+  amount: number;
+  date: string;
+  receiptNumber: string;
+}
+
 const initialBills: Bill[] = [];
 
 const billIcons = {
@@ -213,6 +220,17 @@ export function UtilityBills({ onNavigateToWiFi }: UtilityBillsProps) {
     .filter(bill => bill.status === 'paid')
     .reduce((sum, bill) => sum + bill.amount, 0);
 
+  const yakaPurchases: YakaPurchase[] = paymentRecords
+    .filter((payment: any) => payment.displayType === 'electricity_token' || String(payment.receiptNumber || '').startsWith('YAKA-'))
+    .map((payment: any) => ({
+      id: payment.id,
+      amount: Number(payment.amount || 0),
+      date: payment.date || payment.createdAt || new Date().toISOString(),
+      receiptNumber: String(payment.receiptNumber || ''),
+    }));
+
+  const totalYakaPaid = yakaPurchases.reduce((sum, purchase) => sum + purchase.amount, 0);
+
   const totalOutstanding = bills
     .filter(bill => bill.status === 'pending')
     .reduce((sum, bill) => sum + bill.amount, 0);
@@ -251,7 +269,7 @@ export function UtilityBills({ onNavigateToWiFi }: UtilityBillsProps) {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-sm text-gray-600 mb-2">Bills Paid</p>
-              <p className="text-3xl">UGX {totalPaid.toLocaleString()}</p>
+              <p className="text-3xl">UGX {(totalPaid + totalYakaPaid).toLocaleString()}</p>
             </div>
             <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
               <CheckCircle className="w-5 h-5 text-green-600" />
@@ -454,6 +472,11 @@ export function UtilityBills({ onNavigateToWiFi }: UtilityBillsProps) {
               </tr>
             </thead>
             <tbody>
+              {bills.length === 0 && yakaPurchases.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="p-6 text-sm text-gray-600">No bills or token purchases yet.</td>
+                </tr>
+              )}
               {bills.map((bill) => {
                 const Icon = billIcons[bill.type];
                 const iconColor = billColors[bill.type];
@@ -509,6 +532,35 @@ export function UtilityBills({ onNavigateToWiFi }: UtilityBillsProps) {
                   </tr>
                 );
               })}
+              {yakaPurchases.map((purchase) => (
+                <tr key={`yaka-${purchase.id}`} className="border-b hover:bg-gray-50 bg-yellow-50/40">
+                  <td className="p-4">
+                    <div className="flex items-center gap-3">
+                      <Zap className="w-5 h-5 text-yellow-600" />
+                      <span className="text-sm">Electricity (Yaka Token)</span>
+                    </div>
+                  </td>
+                  <td className="p-4 text-sm">UMEME</td>
+                  <td className="p-4 text-sm">Prepaid Meter</td>
+                  <td className="p-4 text-sm">UGX {purchase.amount.toLocaleString()}</td>
+                  <td className="p-4 text-sm">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-gray-400" />
+                      {new Date(purchase.date).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                      }).replace(/\//g, '-')}
+                    </div>
+                  </td>
+                  <td className="p-4">
+                    <span className="px-3 py-1 rounded-full text-xs bg-green-100 text-green-700">paid</span>
+                  </td>
+                  <td className="p-4 text-xs text-gray-600">
+                    Token Ref: {purchase.receiptNumber || 'YAKA'}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

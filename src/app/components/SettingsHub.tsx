@@ -257,7 +257,7 @@ export function SettingsHub({ role, userName, subtitle, onLogout, onNavigateToVi
   ]);
 
   useEffect(() => {
-    if (role !== 'tenant' || activeSectionId !== 'tenancy') {
+    if (role !== 'tenant' || !['tenancy', 'documents'].includes(activeSectionId)) {
       return;
     }
 
@@ -449,14 +449,60 @@ export function SettingsHub({ role, userName, subtitle, onLogout, onNavigateToVi
         );
 
       case 'documents':
+        const downloadTextFile = (filename: string, content: string) => {
+          const blob = new Blob([content], { type: 'text/plain' });
+          const link = document.createElement('a');
+          const url = URL.createObjectURL(blob);
+          link.setAttribute('href', url);
+          link.setAttribute('download', filename);
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        };
+
+        const downloadLeaseSummary = () => {
+          const content = `RENTIFY LEASE SUMMARY\n\nTenant: ${userName}\nBuilding: ${assignmentInfo?.building || 'Not assigned'}\nUnit: ${assignmentInfo?.unit || 'Not assigned'}\nLease Start: ${assignmentInfo?.leaseStartDate || 'Not set'}\nLease End: ${assignmentInfo?.leaseEndDate || 'Not set'}\nMonthly Rent: UGX ${Number(assignmentInfo?.rent || 0).toLocaleString()}\nGenerated: ${new Date().toLocaleString()}\n`;
+          downloadTextFile(`lease_summary_${new Date().toISOString().slice(0, 10)}.txt`, content);
+          toast.success('Lease summary downloaded');
+        };
+
+        const downloadPaymentStatement = () => {
+          const content = `RENTIFY PAYMENT STATEMENT\n\nTenant: ${userName}\nBuilding: ${assignmentInfo?.building || 'Not assigned'}\nUnit: ${assignmentInfo?.unit || 'Not assigned'}\n\nOpen Payment History in the app for full transaction list.\nGenerated: ${new Date().toLocaleString()}\n`;
+          downloadTextFile(`payment_statement_${new Date().toISOString().slice(0, 10)}.txt`, content);
+          toast.success('Payment statement downloaded');
+        };
+
         return (
           <div className="space-y-4">
             <div className="rounded-xl border p-5 space-y-3">
               <p className="text-lg font-medium">Documents & Agreements</p>
               {role === 'tenant' ? (
-                <Button onClick={() => onOpenLeaseViewer?.()}>Open Lease Agreement</Button>
+                <div className="space-y-2">
+                  <Button onClick={() => onOpenLeaseViewer?.()}>View Lease Agreement</Button>
+                  <Button variant="outline" onClick={downloadLeaseSummary}>Download Lease Summary</Button>
+                  <Button variant="outline" onClick={downloadPaymentStatement}>Download Payment Statement</Button>
+                </div>
               ) : (
-                <Button onClick={() => onNavigateToView?.('documents')}>Open Documents & Leases</Button>
+                <div className="space-y-2">
+                  <Button onClick={() => onNavigateToView?.('documents')}>View Documents & Leases</Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      const content = `RENTIFY DOCUMENTS EXPORT\n\nRole: Landlord\nUser: ${userName}\nGenerated: ${new Date().toLocaleString()}\n\nOpen Documents & Leases in the app for full records.\n`;
+                      const blob = new Blob([content], { type: 'text/plain' });
+                      const link = document.createElement('a');
+                      const url = URL.createObjectURL(blob);
+                      link.setAttribute('href', url);
+                      link.setAttribute('download', `landlord_documents_export_${new Date().toISOString().slice(0, 10)}.txt`);
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      toast.success('Documents export downloaded');
+                    }}
+                  >
+                    Download Documents Export
+                  </Button>
+                </div>
               )}
             </div>
           </div>

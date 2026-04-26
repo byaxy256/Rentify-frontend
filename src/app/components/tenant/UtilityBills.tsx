@@ -38,7 +38,7 @@ const billIcons = {
 };
 
 const billLabels = {
-  electricity: 'Electricity (UMEME)',
+  electricity: 'Electricity (Light)',
   water: 'Water (NWSC)',
   rubbish: 'Rubbish Collection',
   wifi: 'WiFi Internet',
@@ -90,7 +90,7 @@ export function UtilityBills({ onNavigateToWiFi }: UtilityBillsProps) {
           ? billsResult.data.map((bill: any) => ({
               id: bill.id,
               type: bill.type,
-              provider: bill.type === 'electricity' ? 'UMEME' : bill.type === 'water' ? 'NWSC' : bill.type === 'rubbish' ? 'Rubbish Collection' : 'Provider',
+              provider: bill.type === 'electricity' ? 'Light' : bill.type === 'water' ? 'NWSC' : bill.type === 'rubbish' ? 'Rubbish Collection' : 'Provider',
               account: bill.unitId || 'Tenant Unit',
               amount: Number(bill.amount || 0),
               dueDate: bill.dueDate,
@@ -315,7 +315,7 @@ export function UtilityBills({ onNavigateToWiFi }: UtilityBillsProps) {
             <div className="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center mx-auto mb-4">
               <Zap className="w-6 h-6 text-yellow-600" />
             </div>
-            <h4 className="mb-2">Electricity (UMEME)</h4>
+            <h4 className="mb-2">Electricity (Light)</h4>
             <p className="text-sm text-gray-600 mb-4">Buy Yaka token using your meter number and phone number</p>
             <Button
               className="w-full bg-black text-white hover:bg-gray-800"
@@ -540,7 +540,7 @@ export function UtilityBills({ onNavigateToWiFi }: UtilityBillsProps) {
                       <span className="text-sm">Electricity (Yaka Token)</span>
                     </div>
                   </td>
-                  <td className="p-4 text-sm">UMEME</td>
+                  <td className="p-4 text-sm">Light</td>
                   <td className="p-4 text-sm">Prepaid Meter</td>
                   <td className="p-4 text-sm">UGX {purchase.amount.toLocaleString()}</td>
                   <td className="p-4 text-sm">

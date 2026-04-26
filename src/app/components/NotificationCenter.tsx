@@ -29,6 +29,36 @@ export function NotificationCenter({ userType, onNotificationClick }: Notificati
   const [unreadCount, setUnreadCount] = useState(0);
   const [pushEnabled, setPushEnabled] = useState(false);
 
+  const getSettingsKey = () => {
+    const rawUserId = (localStorage.getItem('userId') || '').trim();
+    const rawUserEmail = (localStorage.getItem('userEmail') || '').trim().toLowerCase();
+    const identity = rawUserId || rawUserEmail || 'session';
+    const role = userType === 'admin' ? 'landlord' : userType;
+    return `settings:${role}:${identity.toLowerCase()}`;
+  };
+
+  const applyNotificationPreferences = (items: Notification[]) => {
+    try {
+      const settingsRaw = localStorage.getItem(getSettingsKey());
+      const settings = settingsRaw ? JSON.parse(settingsRaw) : {};
+
+      return items.filter((item) => {
+        if (item.type === 'payment') {
+          return settings.notifyPayments !== false;
+        }
+        if (item.type === 'maintenance') {
+          return settings.notifyRequests !== false;
+        }
+        if (item.type === 'message') {
+          return settings.notifyMessages !== false;
+        }
+        return true;
+      });
+    } catch {
+      return items;
+    }
+  };
+
   useEffect(() => {
     // Check if push notifications are already enabled
     if (pushNotificationService.isSupported()) {
@@ -74,8 +104,9 @@ export function NotificationCenter({ userType, onNotificationClick }: Notificati
             allNotifications.push(...messageNotifs);
           }
 
-          setNotifications(allNotifications);
-          setUnreadCount(allNotifications.length);
+          const filteredNotifications = applyNotificationPreferences(allNotifications);
+          setNotifications(filteredNotifications);
+          setUnreadCount(filteredNotifications.length);
           return;
         }
 
@@ -190,8 +221,9 @@ export function NotificationCenter({ userType, onNotificationClick }: Notificati
             // Stored request data may be unavailable, continue
           }
 
-          setNotifications(allNotifications);
-          setUnreadCount(allNotifications.filter(n => !n.read).length);
+          const filteredNotifications = applyNotificationPreferences(allNotifications);
+          setNotifications(filteredNotifications);
+          setUnreadCount(filteredNotifications.filter(n => !n.read).length);
           return;
         }
 

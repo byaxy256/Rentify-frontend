@@ -46,6 +46,30 @@ async function requireAdmin(request: Request) {
   return { user, response: null };
 }
 
+async function listAllAuthUsers(supabase: ReturnType<typeof createServiceClient>) {
+  const allUsers: Array<{ id: string; created_at?: string; email?: string; user_metadata?: Record<string, unknown> }> = [];
+  const perPage = 1000;
+  let page = 1;
+
+  while (true) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage });
+    if (error) {
+      throw error;
+    }
+
+    const users = data?.users || [];
+    allUsers.push(...users);
+
+    if (users.length < perPage) {
+      break;
+    }
+
+    page += 1;
+  }
+
+  return allUsers;
+}
+
 export async function handleGetAdminOverview(request: Request) {
   const startedAt = Date.now();
 
@@ -56,6 +80,7 @@ export async function handleGetAdminOverview(request: Request) {
     const supabase = createServiceClient();
 
     const [
+      authUsersResult,
       profilesResult,
       buildingsResult,
       unitsResult,
@@ -63,7 +88,8 @@ export async function handleGetAdminOverview(request: Request) {
       tenantRequestsResult,
       auditResult,
     ] = await Promise.all([
-      supabase.from('profiles').select('id, role, created_at'),
+      listAllAuthUsers(supabase),
+      supabase.from('profiles').select('id, role, created_at, email'),
       supabase.from('buildings').select('id, total_units, occupied_units'),
       supabase.from('units').select('id, is_occupied'),
       supabase.from('payments').select('id, amount, status, date'),
@@ -72,6 +98,7 @@ export async function handleGetAdminOverview(request: Request) {
     ]);
 
     const possibleError = [
+      authUsersResult instanceof Error ? authUsersResult : null,
       profilesResult.error,
       buildingsResult.error,
       unitsResult.error,
@@ -84,6 +111,7 @@ export async function handleGetAdminOverview(request: Request) {
       return errorResponse('Query Failed', possibleError.message, 500);
     }
 
+    const authUsers = Array.isArray(authUsersResult) ? authUsersResult : [];
     const profiles = profilesResult.data || [];
     const buildings = buildingsResult.data || [];
     const units = unitsResult.data || [];
@@ -91,7 +119,7 @@ export async function handleGetAdminOverview(request: Request) {
     const tenantRequests = tenantRequestsResult.data || [];
     const auditLogs = auditResult.data || [];
 
-    const totalUsers = profiles.length;
+    const totalUsers = Math.max(authUsers.length, profiles.length);
     const totalProperties = buildings.length;
     const totalUnits = Number(buildings.reduce((sum: number, b: any) => sum + Number(b.total_units || 0), 0));
     const occupiedUnits = Number(buildings.reduce((sum: number, b: any) => sum + Number(b.occupied_units || 0), 0));
@@ -110,12 +138,13 @@ export async function handleGetAdminOverview(request: Request) {
       txMap.set(key, { transactions: 0, amount: 0 });
     }
 
-    for (const profile of profiles) {
-      const key = monthKey(profile.created_at);
+    for (const profile of profiles.length > 0 ? profiles : authUsers) {
+      const key = monthKey(profile.created_at || profile.created_at);
       if (!userGrowthMap.has(key)) continue;
       const current = userGrowthMap.get(key)!;
-      if (profile.role === 'landlord') current.landlords += 1;
-      if (profile.role === 'tenant') current.tenants += 1;
+      const role = (profile as any).role || (profile as any).user_metadata?.role;
+      if (role === 'landlord') current.landlords += 1;
+      if (role === 'tenant') current.tenants += 1;
     }
 
     for (const payment of completedPayments) {
@@ -138,9 +167,12 @@ export async function handleGetAdminOverview(request: Request) {
       amount: txMap.get(key)?.amount || 0,
     }));
 
-    const tenantCount = profiles.filter((p: any) => p.role === 'tenant').length;
-    const landlordCount = profiles.filter((p: any) => p.role === 'landlord').length;
-    const adminCount = profiles.filter((p: any) => p.role === 'admin').length;
+    const roleSource = profiles.length > 0 ? profiles : authUsers.map((user: any) => ({
+      role: user.user_metadata?.role || 'tenant',
+    }));
+    const tenantCount = roleSource.filter((p: any) => p.role === 'tenant').length;
+    const landlordCount = roleSource.filter((p: any) => p.role === 'landlord').length;
+    const adminCount = roleSource.filter((p: any) => p.role === 'admin').length;
 
     const occupiedUnitCount = units.filter((u: any) => Boolean(u.is_occupied)).length;
     const vacantUnitCount = Math.max(0, units.length - occupiedUnitCount);

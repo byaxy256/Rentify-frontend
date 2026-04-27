@@ -39,16 +39,122 @@ export function AdminOverview() {
     try {
       setIsLoading(true);
       const accessToken = localStorage.getItem('accessToken');
-      const response = await requestFunction('/admin/overview', {
-        headers: {
-          ...(accessToken ? { 'x-user-token': accessToken } : {}),
-        },
+      const headers = {
+        ...(accessToken ? { 'x-user-token': accessToken } : {}),
+      };
+      const startedAt = performance.now();
+
+      const [overviewResponse, usersResponse, propertiesResponse, revenueResponse] = await Promise.all([
+        requestFunction('/admin/overview', { headers }),
+        requestFunction('/auth/users', { headers }),
+        requestFunction('/admin/properties', { headers }),
+        requestFunction('/admin/revenue', { headers }),
+      ]);
+
+      const [overviewResult, usersResult, propertiesResult, revenueResult] = await Promise.all([
+        overviewResponse.json().catch(() => ({})),
+        usersResponse.json().catch(() => ({})),
+        propertiesResponse.json().catch(() => ({})),
+        revenueResponse.json().catch(() => ({})),
+      ]);
+
+      const baseOverview = overviewResponse.ok ? overviewResult?.data || {} : {};
+      const users = Array.isArray(usersResult?.data?.users) ? usersResult.data.users : [];
+      const propertySummary = propertiesResult?.data?.summary || {};
+      const properties = Array.isArray(propertiesResult?.data?.properties) ? propertiesResult.data.properties : [];
+      const revenueSummary = revenueResult?.data?.summary || {};
+      const monthlyRevenue = Array.isArray(revenueResult?.data?.monthlyRevenue) ? revenueResult.data.monthlyRevenue : [];
+
+      const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
+      const currentYear = new Date().getFullYear();
+      const lastSixMonths = Array.from({ length: 6 }, (_, index) => {
+        const date = new Date(currentYear, new Date().getMonth() - (5 - index), 1);
+        return {
+          key: date.toISOString().slice(0, 7),
+          label: date.toLocaleString('en-US', { month: 'short', year: 'numeric' }),
+        };
       });
 
-      const result = await response.json().catch(() => ({}));
-      if (response.ok) {
-        setOverview(result.data || null);
+      const usersByMonth = new Map(lastSixMonths.map(({ key }) => [key, { landlords: 0, tenants: 0 }]));
+      for (const user of users) {
+        const createdAt = user.created_at || user.joinDate || user.createdAt;
+        const createdKey = createdAt ? new Date(createdAt).toISOString().slice(0, 7) : '';
+        if (!usersByMonth.has(createdKey)) continue;
+        const role = user.role || user.user_metadata?.role;
+        const bucket = usersByMonth.get(createdKey)!;
+        if (role === 'landlord') bucket.landlords += 1;
+        if (role === 'tenant') bucket.tenants += 1;
       }
+
+      const txMap = new Map(lastSixMonths.map(({ key }) => [key, { transactions: 0, amount: 0 }]));
+      for (const row of monthlyRevenue) {
+        const label = String(row.month || '');
+        const matchingMonth = lastSixMonths.find(({ label: monthLabel }) => monthLabel === label);
+        if (!matchingMonth) continue;
+        txMap.set(matchingMonth.key, {
+          transactions: Number(row.transactions || 0),
+          amount: Number(row.revenue || 0),
+        });
+      }
+
+      const occupancyFromProperties = properties.reduce((sum: number, property: any) => sum + Number(property.occupied || 0), 0);
+      const unitsFromProperties = properties.reduce((sum: number, property: any) => sum + Number(property.units || 0), 0);
+
+      const computedOverview: OverviewPayload = {
+        stats: {
+          totalUsers: Number(baseOverview.stats?.totalUsers || users.length || 0),
+          totalProperties: Number(baseOverview.stats?.totalProperties || propertySummary.totalProperties || properties.length || 0),
+          totalRevenue: Number(baseOverview.stats?.totalRevenue || revenueSummary.totalRevenue || 0),
+          totalCommission: Number(baseOverview.stats?.totalCommission || revenueSummary.totalCommission || 0),
+          activeTransactions: Number(baseOverview.stats?.activeTransactions || revenueSummary.totalTransactions || monthlyRevenue.reduce((sum: number, row: any) => sum + Number(row.transactions || 0), 0)),
+          totalUnits: Number(baseOverview.stats?.totalUnits || propertySummary.totalUnits || unitsFromProperties || 0),
+          occupiedUnits: Number(baseOverview.stats?.occupiedUnits || propertySummary.totalOccupied || occupancyFromProperties || 0),
+          occupancyRate: Number(baseOverview.stats?.occupancyRate || propertySummary.occupancyRate || 0),
+        },
+        charts: {
+          userGrowthData: baseOverview.charts?.userGrowthData?.length
+            ? baseOverview.charts.userGrowthData
+            : lastSixMonths.map(({ key, label }) => ({
+                month: label,
+                landlords: usersByMonth.get(key)?.landlords || 0,
+                tenants: usersByMonth.get(key)?.tenants || 0,
+              })),
+          transactionData: baseOverview.charts?.transactionData?.length
+            ? baseOverview.charts.transactionData
+            : lastSixMonths.map(({ key, label }) => ({
+                month: label,
+                transactions: txMap.get(key)?.transactions || 0,
+                amount: txMap.get(key)?.amount || 0,
+              })),
+          userDistribution: baseOverview.charts?.userDistribution?.length
+            ? baseOverview.charts.userDistribution
+            : (() => {
+                const tenantCount = users.filter((user: any) => (user.role || user.user_metadata?.role) === 'tenant').length;
+                const landlordCount = users.filter((user: any) => (user.role || user.user_metadata?.role) === 'landlord').length;
+                const adminCount = users.filter((user: any) => (user.role || user.user_metadata?.role) === 'admin').length;
+                return [
+                  { name: 'Tenants', value: tenantCount, color: '#3b82f6' },
+                  { name: 'Landlords', value: landlordCount, color: '#8b5cf6' },
+                  { name: 'Admins', value: adminCount, color: '#f59e0b' },
+                ];
+              })(),
+          propertyStatus: baseOverview.charts?.propertyStatus?.length
+            ? baseOverview.charts.propertyStatus
+            : [
+                { name: 'Occupied', value: Number(baseOverview.stats?.occupiedUnits || propertySummary.totalOccupied || occupancyFromProperties || 0), color: '#10b981' },
+                { name: 'Vacant', value: Math.max(0, Number(baseOverview.stats?.totalUnits || propertySummary.totalUnits || unitsFromProperties || 0) - Number(baseOverview.stats?.occupiedUnits || propertySummary.totalOccupied || occupancyFromProperties || 0)), color: '#ef4444' },
+              ],
+        },
+        health: {
+          apiResponseTimeMs: Number(baseOverview.health?.apiResponseTimeMs || Math.max(1, Math.round(performance.now() - startedAt))),
+          databaseLoadPercent: Number(baseOverview.health?.databaseLoadPercent || 0),
+          uptimePercent: Number(baseOverview.health?.uptimePercent || 100),
+          errorRatePercent: Number(baseOverview.health?.errorRatePercent || 0),
+        },
+        recentActivities: Array.isArray(baseOverview.recentActivities) ? baseOverview.recentActivities : [],
+      };
+
+      setOverview(computedOverview);
     } finally {
       setIsLoading(false);
     }
@@ -92,6 +198,14 @@ export function AdminOverview() {
       change: 'Live',
       sublabel: 'Last 6 months',
       color: 'bg-yellow-500',
+    },
+    {
+      icon: Building2,
+      label: 'Property Occupancy',
+      value: `${overview?.stats.occupiedUnits || 0}/${overview?.stats.totalUnits || 0}`,
+      change: `${overview?.stats.occupancyRate || 0}%`,
+      sublabel: 'Occupied vs total units',
+      color: 'bg-emerald-500',
     },
   ], [overview]);
 

@@ -378,7 +378,9 @@ export function SettingsHub({ role, userName, subtitle, onLogout, onNavigateToVi
     });
   };
 
-  const drawPdfLogo = (doc: jsPDF) => {
+  // Draws Rentify logo (left), shield (center), and watermark
+  const drawPdfHeader = (doc: jsPDF, refNumber?: string) => {
+    // Logo left
     doc.setFillColor(30, 58, 63);
     doc.roundedRect(14, 10, 18, 18, 3, 3, 'F');
     doc.setTextColor(255, 255, 255);
@@ -386,38 +388,67 @@ export function SettingsHub({ role, userName, subtitle, onLogout, onNavigateToVi
     doc.setFontSize(12);
     doc.text('R', 20.8, 21.7);
     doc.setTextColor(0, 0, 0);
-  };
 
-  const downloadBrandedPdf = async (filename: string, title: string, lines: string[]) => {
-    const doc = new jsPDF();
-    drawPdfLogo(doc);
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(18);
-    doc.text('Rentify', 36, 18);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(11);
-    doc.text('renting but smarter', 36, 24);
-
+    // Shield logo (center top)
     doc.setDrawColor(30, 58, 63);
-    doc.line(14, 32, 196, 32);
+    doc.setLineWidth(0.7);
+    doc.ellipse(105, 22, 10, 10, 'S');
+    doc.setFontSize(18);
+    doc.textWithLink('🛡️', 101, 27, { url: '' }); // fallback shield emoji
 
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(14);
-    doc.text(title, 14, 42);
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(11);
-    let y = 52;
-    for (const line of lines) {
-      const wrapped = doc.splitTextToSize(line, 180);
-      doc.text(wrapped, 14, y);
-      y += wrapped.length * 6;
+    // Large red reference number (top right)
+    if (refNumber) {
+      doc.setTextColor(220, 38, 38);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(18);
+      doc.text(refNumber, 180, 22, { align: 'right' });
+      doc.setTextColor(0, 0, 0);
     }
 
-    doc.setFontSize(9);
-    doc.setTextColor(90, 90, 90);
-    doc.text(`Generated on ${new Date().toLocaleString()}`, 14, 285);
+    // Watermark (Rentify logo faded in background)
+    doc.setTextColor(220, 220, 220);
+    doc.setFontSize(60);
+    doc.text('R', 70, 120);
+    doc.setTextColor(0, 0, 0);
+  };
+
+  // For receipts/lease summary: use new Rentify branding
+  const downloadBrandedPdf = async (filename: string, title: string, lines: string[], refNumber?: string) => {
+    const doc = new jsPDF();
+    drawPdfHeader(doc, refNumber);
+
+    // App name centered, bold
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(20);
+    doc.text('RENTIFY', 105, 40, { align: 'center' });
+
+    // Title centered
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(15);
+    doc.text(title, 105, 52, { align: 'center' });
+
+    // Details (left label, right value)
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(12);
+    let y = 68;
+    for (const line of lines) {
+      const [label, ...rest] = line.split(':');
+      if (rest.length) {
+        doc.setFont('helvetica', 'bold');
+        doc.text(label + ':', 24, y);
+        doc.setFont('helvetica', 'normal');
+        doc.text(rest.join(':').trim(), 70, y);
+      } else {
+        doc.text(line, 24, y);
+      }
+      y += 9;
+    }
+
+    // Footer: Contact info
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(10);
+    doc.text('Contact Rentify on Tel: 0200-502-140, email: support@rentify.com', 14, 285);
+
     doc.save(filename);
   };
 
@@ -548,17 +579,60 @@ export function SettingsHub({ role, userName, subtitle, onLogout, onNavigateToVi
           toast.success('Lease summary PDF downloaded');
         };
 
+        // Payment statement: Excel-like table with date, transaction, amount, method, status
         const downloadPaymentStatement = async () => {
-          await downloadBrandedPdf(
-            `payment_statement_${new Date().toISOString().slice(0, 10)}.pdf`,
-            'Payment Statement',
-            [
-              `Tenant: ${userName}`,
-              `Building: ${assignmentInfo?.building || 'Not assigned'}`,
-              `Unit: ${assignmentInfo?.unit || 'Not assigned'}`,
-              'Open Payment History in the app for full transaction details.',
-            ],
-          );
+          // Fetch payment history for the user
+          let payments: any[] = [];
+          try {
+            const accessToken = localStorage.getItem('accessToken');
+            const response = await requestFunction('/payments/me', {
+              headers: {
+                ...(accessToken ? { 'x-user-token': accessToken } : {}),
+              },
+            });
+            const result = await response.json().catch(() => ({}));
+            if (response.ok && Array.isArray(result?.data?.payments)) {
+              payments = result.data.payments;
+            }
+          } catch {}
+
+          const doc = new jsPDF();
+          drawPdfHeader(doc);
+
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(20);
+          doc.text('RENTIFY', 105, 40, { align: 'center' });
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(15);
+          doc.text('Payment Statement', 105, 52, { align: 'center' });
+
+          // Table headers
+          const headers = ['Date', 'Transaction', 'Amount', 'Method', 'Status'];
+          let y = 68;
+          doc.setFont('helvetica', 'bold');
+          headers.forEach((h, i) => doc.text(h, 20 + i * 38, y));
+          y += 8;
+          doc.setFont('helvetica', 'normal');
+          // Table rows
+          payments.slice(0, 25).forEach((p) => {
+            doc.text(new Date(p.date).toLocaleDateString(), 20, y);
+            doc.text((p.displayType || p.type || ''), 58, y);
+            doc.text('UGX ' + Number(p.amount || 0).toLocaleString(), 96, y);
+            doc.text(p.method || '', 134, y);
+            doc.text((p.status || 'PAID').toUpperCase(), 172, y);
+            y += 8;
+            if (y > 270) {
+              doc.addPage();
+              y = 20;
+            }
+          });
+
+          // Footer
+          doc.setFont('helvetica', 'italic');
+          doc.setFontSize(10);
+          doc.text('Contact Rentify on Tel: 0200-502-140, email: support@rentify.com', 14, 285);
+
+          doc.save(`payment_statement_${new Date().toISOString().slice(0, 10)}.pdf`);
           toast.success('Payment statement PDF downloaded');
         };
 

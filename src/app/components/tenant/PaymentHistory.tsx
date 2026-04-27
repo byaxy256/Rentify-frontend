@@ -30,13 +30,35 @@ const paymentLabels = {
 export function PaymentHistory() {
   const [payments, setPayments] = useState<Payment[]>([]);
 
-  const drawPdfLogo = (doc: jsPDF) => {
+  // Draws Rentify logo (left), shield (center), and watermark
+  const drawPdfHeader = (doc: jsPDF, receiptId: string) => {
+    // Logo left
     doc.setFillColor(30, 58, 63);
     doc.roundedRect(14, 10, 18, 18, 3, 3, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
     doc.text('R', 20.8, 21.7);
+    doc.setTextColor(0, 0, 0);
+
+    // Shield logo (center top)
+    doc.setDrawColor(30, 58, 63);
+    doc.setLineWidth(0.7);
+    doc.ellipse(105, 22, 10, 10, 'S');
+    doc.setFontSize(18);
+    doc.textWithLink('🛡️', 101, 27, { url: '' }); // fallback shield emoji
+
+    // Large red receipt number (top right)
+    doc.setTextColor(220, 38, 38);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.text(receiptId, 180, 22, { align: 'right' });
+    doc.setTextColor(0, 0, 0);
+
+    // Watermark (Rentify logo faded in background)
+    doc.setTextColor(200, 200, 200);
+    doc.setFontSize(60);
+    doc.text('R', 70, 120, { opacity: 0.08 });
     doc.setTextColor(0, 0, 0);
   };
 
@@ -86,47 +108,78 @@ export function PaymentHistory() {
     const doc = new jsPDF();
     const receiptId = payment.receiptNumber || `REC-${paymentId.padStart(6, '0')}`;
 
-    drawPdfLogo(doc);
+    drawPdfHeader(doc, receiptId);
 
+    // School name equivalent: Rentify app name centered, bold
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(18);
-    doc.text('Rentify', 36, 18);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(11);
-    doc.text('renting but smarter', 36, 24);
+    doc.setFontSize(20);
+    doc.text('RENTIFY', 105, 40, { align: 'center' });
 
-    doc.setDrawColor(30, 58, 63);
-    doc.line(14, 32, 196, 32);
-
+    // Title: Transaction Receipt
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(14);
-    doc.text('Payment Receipt', 14, 42);
+    doc.setFontSize(15);
+    doc.text('Transaction Receipt', 105, 52, { align: 'center' });
 
+    // Details table (left label, right value)
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(11);
+    doc.setFontSize(12);
     const details = [
-      `Receipt ID: ${receiptId}`,
-      `Date: ${new Date(payment.date).toLocaleDateString()}`,
-      `Type: ${paymentLabels[payment.type] || 'Utility Payment'}`,
-      `Amount: UGX ${payment.amount.toLocaleString()}`,
-      `Payment Method: ${payment.method}`,
-      `Status: ${payment.status.toUpperCase()}`,
-      'Thank you for your payment.',
+      ['Payment Code:', receiptId],
+      ['Tenant Name:', payment.tenantName || ''],
+      ['Property:', payment.propertyName || ''],
+      ['Amount:', `UGX ${payment.amount.toLocaleString()}`],
+      ['Amount in words:', amountToWords(payment.amount)],
+      ['Date:', new Date(payment.date).toLocaleString()],
+      ['Payment Method:', payment.method],
+      ['Description:', payment.displayType || payment.type],
+      ['Status:', payment.status.toUpperCase()],
     ];
-
-    let y = 52;
-    details.forEach((line) => {
-      doc.text(line, 14, y);
-      y += 8;
+    let y = 68;
+    details.forEach(([label, value]) => {
+      doc.setFont('helvetica', 'bold');
+      doc.text(label, 24, y);
+      doc.setFont('helvetica', 'normal');
+      doc.text(String(value), 70, y);
+      y += 9;
     });
 
-    doc.setFontSize(9);
-    doc.setTextColor(90, 90, 90);
-    doc.text(`Generated on ${new Date().toLocaleString()}`, 14, 285);
+    // Footer: Contact info
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(10);
+    doc.text('Contact Rentify on Tel: 0200-502-140, email: support@rentify.com', 14, 285);
 
     doc.save(`receipt_${paymentId}_${payment.date}.pdf`);
     toast.success('Receipt PDF downloaded successfully!');
   };
+
+  // Helper: Convert amount to words (simple, English, UGX)
+  function amountToWords(amount: number): string {
+    // Simple implementation for demo; replace with robust one if needed
+    const ones = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine'];
+    const tens = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+    const teens = ['Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+    if (amount === 0) return 'Zero';
+    let words = '';
+    if (amount >= 1000) {
+      words += ones[Math.floor(amount/1000)] + ' Thousand ';
+      amount = amount % 1000;
+    }
+    if (amount >= 100) {
+      words += ones[Math.floor(amount/100)] + ' Hundred ';
+      amount = amount % 100;
+    }
+    if (amount >= 20) {
+      words += tens[Math.floor(amount/10)] + ' ';
+      amount = amount % 10;
+    } else if (amount >= 10) {
+      words += teens[amount-10] + ' ';
+      amount = 0;
+    }
+    if (amount > 0) {
+      words += ones[amount] + ' ';
+    }
+    return words.trim() + ' Shillings Only';
+  }
 
   const totalPaid = payments.reduce((sum, payment) => sum + payment.amount, 0);
   const thisMonthPayments = payments.filter((payment) => {

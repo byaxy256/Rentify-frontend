@@ -128,6 +128,7 @@ export async function handleGetAdminOverview(request: Request) {
     const completedPayments = payments.filter((p: any) => p.status === 'completed');
     const totalRevenue = completedPayments.reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
     const totalCommission = Math.round(totalRevenue * 0.05);
+    const activeTransactions = payments.filter((p: any) => ['completed', 'pending'].includes(String(p.status || '').toLowerCase())).length;
 
     const monthKeys = getLastMonthKeys(6);
     const userGrowthMap = new Map<string, { landlords: number; tenants: number }>();
@@ -147,12 +148,14 @@ export async function handleGetAdminOverview(request: Request) {
       if (role === 'tenant') current.tenants += 1;
     }
 
-    for (const payment of completedPayments) {
+    for (const payment of payments) {
       const key = monthKey(payment.date);
       if (!txMap.has(key)) continue;
       const current = txMap.get(key)!;
       current.transactions += 1;
-      current.amount += Number(payment.amount || 0);
+      if (payment.status === 'completed') {
+        current.amount += Number(payment.amount || 0);
+      }
     }
 
     const userGrowthData = monthKeys.map((key) => ({
@@ -186,7 +189,7 @@ export async function handleGetAdminOverview(request: Request) {
     const openTickets = tenantRequests.filter((t: any) => t.status === 'pending').length;
     const inProgressTickets = tenantRequests.filter((t: any) => t.status === 'in-progress').length;
 
-    const recentActivities = auditLogs.slice(0, 8).map((log: any) => ({
+    const auditActivities = auditLogs.slice(0, 8).map((log: any) => ({
       id: log.id,
       type: log.action,
       message: log.details || log.action,
@@ -194,9 +197,46 @@ export async function handleGetAdminOverview(request: Request) {
       status: log.status,
     }));
 
+    const fallbackActivities = [
+      ...payments.slice(0, 4).map((payment: any) => ({
+        id: `payment-${payment.id}`,
+        type: 'payment',
+        message: `${String(payment.status || 'completed').replace(/^[a-z]/, (char) => char.toUpperCase())} payment of UGX ${Number(payment.amount || 0).toLocaleString()}`,
+        time: payment.date,
+        status: payment.status === 'failed' ? 'failed' : 'success',
+      })),
+      ...tenantRequests.slice(0, 3).map((requestItem: any) => ({
+        id: `request-${requestItem.id}`,
+        type: 'request',
+        message: `Tenant request marked ${requestItem.status}`,
+        time: requestItem.created_at || requestItem.date,
+        status: requestItem.status === 'resolved' ? 'success' : 'success',
+      })),
+      ...buildings.slice(0, 2).map((building: any) => ({
+        id: `building-${building.id}`,
+        type: 'building',
+        message: `Property ${building.name} has ${Number(building.occupied_units || 0)}/${Number(building.total_units || 0)} occupied units`,
+        time: building.created_at,
+        status: 'success',
+      })),
+    ];
+
+    const recentActivities = auditActivities.length > 0 ? auditActivities : fallbackActivities;
+
+    const loadedRowCount = profiles.length + buildings.length + units.length + payments.length + tenantRequests.length + auditLogs.length;
+    const databaseLoadPercent = Number(
+      Math.min(
+        100,
+        Math.max(
+          occupancyRate,
+          Number(((loadedRowCount / Math.max(1, totalUnits + totalProperties * 10 + totalUsers * 2)) * 100).toFixed(1)),
+        ),
+      ),
+    );
+
     const health = {
       apiResponseTimeMs: Date.now() - startedAt,
-      databaseLoadPercent: Math.min(100, Number(((openTickets + inProgressTickets) / Math.max(1, tenantRequests.length || 1) * 100).toFixed(1))),
+      databaseLoadPercent,
       uptimePercent: Number((100 - Math.min(errorRate, 25) * 0.2).toFixed(2)),
       errorRatePercent: errorRate,
     };
@@ -207,7 +247,7 @@ export async function handleGetAdminOverview(request: Request) {
         totalProperties,
         totalRevenue,
         totalCommission,
-        activeTransactions: completedPayments.length,
+        activeTransactions,
         totalUnits,
         occupiedUnits,
         occupancyRate,
@@ -318,7 +358,6 @@ export async function handleGetAdminRevenue(request: Request) {
     const { data: payments, error } = await supabase
       .from('payments')
       .select('id, amount, status, date')
-      .eq('status', 'completed')
       .order('date', { ascending: true });
 
     if (error) {
@@ -335,8 +374,10 @@ export async function handleGetAdminRevenue(request: Request) {
       const key = monthKey(payment.date);
       if (!byMonth.has(key)) continue;
       const current = byMonth.get(key)!;
-      current.revenue += Number(payment.amount || 0);
       current.transactions += 1;
+      if (payment.status === 'completed') {
+        current.revenue += Number(payment.amount || 0);
+      }
     }
 
     const monthlyRevenue = monthKeys.map((key) => {
@@ -352,6 +393,7 @@ export async function handleGetAdminRevenue(request: Request) {
     const totalRevenue = monthlyRevenue.reduce((sum: number, row: any) => sum + row.revenue, 0);
     const totalCommission = monthlyRevenue.reduce((sum: number, row: any) => sum + row.commission, 0);
     const thisMonth = monthlyRevenue[monthlyRevenue.length - 1] || { commission: 0, month: monthLabel(monthKeys[monthKeys.length - 1]) };
+    const totalTransactions = monthlyRevenue.reduce((sum: number, row: any) => sum + Number(row.transactions || 0), 0);
 
     return successResponse({
       summary: {
@@ -359,6 +401,7 @@ export async function handleGetAdminRevenue(request: Request) {
         totalCommission,
         thisMonthCommission: thisMonth.commission,
         thisMonthLabel: thisMonth.month,
+        totalTransactions,
       },
       monthlyRevenue,
     });

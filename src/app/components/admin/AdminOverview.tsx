@@ -10,6 +10,9 @@ interface OverviewPayload {
     totalRevenue: number;
     totalCommission: number;
     activeTransactions: number;
+    totalUnits: number;
+    occupiedUnits: number;
+    occupancyRate: number;
   };
   charts: {
     userGrowthData: Array<{ month: string; landlords: number; tenants: number }>;
@@ -151,7 +154,28 @@ export function AdminOverview() {
           uptimePercent: Number(baseOverview.health?.uptimePercent || 100),
           errorRatePercent: Number(baseOverview.health?.errorRatePercent || 0),
         },
-        recentActivities: Array.isArray(baseOverview.recentActivities) ? baseOverview.recentActivities : [],
+        recentActivities: Array.isArray(baseOverview.recentActivities) && baseOverview.recentActivities.length > 0
+          ? baseOverview.recentActivities
+          : [
+              ...(monthlyRevenue.slice(-3).map((row: any, index: number) => ({
+                id: `revenue-${index}-${row.month}`,
+                message: `${row.transactions || 0} transactions recorded in ${row.month}`,
+                time: new Date().toISOString(),
+                status: 'success' as const,
+              }))),
+              ...(properties.slice(0, 2).map((property: any) => ({
+                id: `property-${property.id}`,
+                message: `Property ${property.name || 'Unknown'} is ${Number(property.occupied || 0)}/${Number(property.units || 0)} occupied`,
+                time: new Date().toISOString(),
+                status: 'success' as const,
+              }))),
+              ...(users.slice(0, 2).map((user: any) => ({
+                id: `user-${user.id}`,
+                message: `${user.name || user.email || 'User'} account loaded`,
+                time: user.joinDate || user.created_at || new Date().toISOString(),
+                status: 'success' as const,
+              }))),
+            ],
       };
 
       setOverview(computedOverview);

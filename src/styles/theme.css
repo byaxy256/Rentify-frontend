@@ -188,3 +188,56 @@
     box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.3), 0 2px 4px -1px rgba(16, 185, 129, 0.2);
   }
 }
+
+@layer components {
+  .dark .dashboard-theme {
+    color: #e5e7eb;
+  }
+
+  .dark .dashboard-theme .bg-white {
+    background-color: #111827;
+  }
+
+  .dark .dashboard-theme .bg-gray-50 {
+    background-color: #0f172a;
+  }
+
+  .dark .dashboard-theme .bg-gray-100 {
+    background-color: #1f2937;
+  }
+
+  .dark .dashboard-theme .text-gray-900,
+  .dark .dashboard-theme .text-gray-800,
+  .dark .dashboard-theme .text-gray-700 {
+    color: #f3f4f6;
+  }
+
+  .dark .dashboard-theme .text-gray-600,
+  .dark .dashboard-theme .text-gray-500,
+  .dark .dashboard-theme .text-gray-400 {
+    color: #cbd5e1;
+  }
+
+  .dark .dashboard-theme .border,
+  .dark .dashboard-theme .border-gray-200,
+  .dark .dashboard-theme .border-gray-300 {
+    border-color: #374151;
+  }
+
+  .dark .dashboard-theme .hover\:bg-gray-50:hover {
+    background-color: #1f2937;
+  }
+
+  .dark .dashboard-theme input,
+  .dark .dashboard-theme select,
+  .dark .dashboard-theme textarea {
+    background-color: #111827;
+    color: #f3f4f6;
+    border-color: #374151;
+  }
+
+  .dark .dashboard-theme input::placeholder,
+  .dark .dashboard-theme textarea::placeholder {
+    color: #9ca3af;
+  }
+}

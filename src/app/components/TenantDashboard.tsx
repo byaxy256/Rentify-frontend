@@ -136,7 +136,7 @@ export function TenantDashboard() {
   ];
 
   return (
-    <div className="relative flex h-screen bg-gray-50 overflow-hidden">
+    <div className="dashboard-theme relative flex h-screen bg-gray-50 overflow-hidden">
       {isSidebarOpen && (
         <button
           type="button"

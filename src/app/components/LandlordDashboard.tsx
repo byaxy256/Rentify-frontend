@@ -231,7 +231,7 @@ export function LandlordDashboard() {
 
   if (showPasswordChange) {
     return (
-      <div className="min-h-screen bg-[#1e3a3f] flex items-center justify-center p-4">
+      <div className="dashboard-theme min-h-screen bg-[#1e3a3f] flex items-center justify-center p-4">
         <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-8">
           <div className="mb-6">
             <h2 className="text-3xl font-bold mb-2">Change Temporary Password</h2>
@@ -279,7 +279,7 @@ export function LandlordDashboard() {
   }
 
   return (
-    <div className="relative flex h-screen bg-gray-50 overflow-hidden">
+    <div className="dashboard-theme relative flex h-screen bg-gray-50 overflow-hidden">
       {isSidebarOpen && (
         <button
           type="button"

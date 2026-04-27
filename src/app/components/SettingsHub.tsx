@@ -20,13 +20,9 @@ import { toast } from 'sonner';
 import { jsPDF } from 'jspdf';
 import {
   APP_LANGUAGE_STORAGE_KEY,
-  APP_THEME_STORAGE_KEY,
   AppLanguage,
-  AppTheme,
   applyLanguagePreference,
-  applyThemePreference,
   getStoredLanguagePreference,
-  getStoredThemePreference,
 } from '../lib/preferences';
 
 type SettingsSectionId =
@@ -212,7 +208,6 @@ export function SettingsHub({ role, userName, subtitle, onLogout, onNavigateToVi
   const [preferredPaymentMethod, setPreferredPaymentMethod] = useState<'mtn' | 'airtel' | 'bank'>('mtn');
   const [defaultPhoneNumber, setDefaultPhoneNumber] = useState('');
   const [language, setLanguage] = useState<AppLanguage>('English');
-  const [theme, setTheme] = useState<AppTheme>('System');
   const [assignmentInfo, setAssignmentInfo] = useState<any>(null);
 
   const languagePreviewText: Record<AppLanguage, string> = {
@@ -242,17 +237,11 @@ export function SettingsHub({ role, userName, subtitle, onLogout, onNavigateToVi
           setLanguage(getStoredLanguagePreference());
         }
 
-        if (parsed.theme === 'System' || parsed.theme === 'Light' || parsed.theme === 'Dark') {
-          setTheme(parsed.theme);
-        } else {
-          setTheme(getStoredThemePreference());
-        }
       } catch {
         // ignore invalid local storage payload
       }
     } else {
       setLanguage(getStoredLanguagePreference());
-      setTheme(getStoredThemePreference());
     }
 
     if (pushNotificationService.isSupported()) {
@@ -271,7 +260,6 @@ export function SettingsHub({ role, userName, subtitle, onLogout, onNavigateToVi
         preferredPaymentMethod,
         defaultPhoneNumber,
         language,
-        theme,
       }),
     );
   }, [
@@ -283,18 +271,15 @@ export function SettingsHub({ role, userName, subtitle, onLogout, onNavigateToVi
     notificationsEnabled,
     preferredPaymentMethod,
     settingsStorageKey,
-    theme,
   ]);
 
   useEffect(() => {
-    localStorage.setItem(APP_THEME_STORAGE_KEY, theme);
     localStorage.setItem(APP_LANGUAGE_STORAGE_KEY, language);
 
-    const cleanupThemeListener = applyThemePreference(theme);
     applyLanguagePreference(language);
 
-    return cleanupThemeListener;
-  }, [language, theme]);
+    return () => {};
+  }, [language]);
 
   useEffect(() => {
     if (role !== 'tenant' || !['tenancy', 'documents'].includes(activeSectionId)) {
@@ -698,19 +683,7 @@ export function SettingsHub({ role, userName, subtitle, onLogout, onNavigateToVi
           <div className="space-y-4">
             <div className="rounded-xl border p-5 space-y-3">
               <p className="text-lg font-medium">App Preferences</p>
-              <div>
-                <label className="text-sm text-gray-600 mb-1 block">Theme</label>
-                <select
-                  aria-label="App theme"
-                  className="w-full p-2 border rounded-lg"
-                  value={theme}
-                  onChange={(event) => setTheme(event.target.value as AppTheme)}
-                >
-                  <option value="System">System</option>
-                  <option value="Light">Light</option>
-                  <option value="Dark">Dark</option>
-                </select>
-              </div>
+              <p className="text-sm text-gray-600">Theme is fixed to light mode across Rentify.</p>
               <div>
                 <label className="text-sm text-gray-600 mb-1 block">Language</label>
                 <select
@@ -725,7 +698,7 @@ export function SettingsHub({ role, userName, subtitle, onLogout, onNavigateToVi
                 </select>
               </div>
               <p className="text-xs text-gray-600">{languagePreviewText[language]}</p>
-              <p className="text-xs text-gray-600">Theme and language are now applied immediately and remembered across sessions.</p>
+              <p className="text-xs text-gray-600">Language is applied immediately and remembered across sessions.</p>
             </div>
           </div>
         );

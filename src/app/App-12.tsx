@@ -11,10 +11,9 @@ import {
 
 export default function App() {
   useEffect(() => {
-    const theme = getStoredThemePreference();
     const language = getStoredLanguagePreference();
 
-    const cleanupThemeListener = applyThemePreference(theme);
+    const cleanupThemeListener = applyThemePreference(getStoredThemePreference());
     applyLanguagePreference(language);
 
     return cleanupThemeListener;

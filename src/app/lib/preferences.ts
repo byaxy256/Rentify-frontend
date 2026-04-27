@@ -1,4 +1,4 @@
-export type AppTheme = 'System' | 'Light' | 'Dark';
+export type AppTheme = 'Light';
 export type AppLanguage = 'English' | 'Luganda' | 'Swahili';
 
 export const APP_THEME_STORAGE_KEY = 'app:theme';
@@ -16,31 +16,9 @@ function applyResolvedTheme(isDark: boolean) {
 }
 
 export function applyThemePreference(theme: AppTheme): () => void {
-  const media = window.matchMedia('(prefers-color-scheme: dark)');
-
-  const apply = () => {
-    if (theme === 'Dark') {
-      applyResolvedTheme(true);
-      return;
-    }
-
-    if (theme === 'Light') {
-      applyResolvedTheme(false);
-      return;
-    }
-
-    applyResolvedTheme(media.matches);
-  };
-
-  apply();
-
-  if (theme !== 'System') {
-    return () => {};
-  }
-
-  const listener = () => apply();
-  media.addEventListener('change', listener);
-  return () => media.removeEventListener('change', listener);
+  applyResolvedTheme(false);
+  localStorage.setItem(APP_THEME_STORAGE_KEY, theme);
+  return () => {};
 }
 
 export function applyLanguagePreference(language: AppLanguage) {
@@ -48,12 +26,7 @@ export function applyLanguagePreference(language: AppLanguage) {
 }
 
 export function getStoredThemePreference(): AppTheme {
-  const value = localStorage.getItem(APP_THEME_STORAGE_KEY);
-  if (value === 'Light' || value === 'Dark' || value === 'System') {
-    return value;
-  }
-
-  return 'System';
+  return 'Light';
 }
 
 export function getStoredLanguagePreference(): AppLanguage {
